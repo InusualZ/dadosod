@@ -1,0 +1,14 @@
+[package]
+name = "dadosod"
+version = "0.0.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+# TODO: Upstream needed changes
+ppc750cl = { version='0.2.0', path='..\ppc750cl\disasm' }
+dol = { version='0.1.0', path='..\ppc750cl\dol' }
+
+argh = "0.1"
