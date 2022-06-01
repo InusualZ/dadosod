@@ -227,6 +227,13 @@ impl Analyser {
             return Ok(format!(".4byte 0x{:08X}  /* illegal {} */", ins.code, FormattedIns(ins.clone())))
         }
 
+        // Special Case - Most likely data as instruction
+        if ins.op == Opcode::Bc && !ins.field_AA() {
+            if ins.field_BD() == 0 {
+                return Ok(format!(".4byte 0x{:08X}  /* {} */", ins.code, FormattedIns(ins.clone())));
+            }
+        }
+
         let simple = ins.clone().simplified();
         let mut f = String::new();
 
