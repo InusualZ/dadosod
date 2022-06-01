@@ -110,63 +110,46 @@ impl Analyser {
             }
         }
     
-        if self.r13_addr != 0 {
-            if ins.op == Opcode::Addi && ins.field_rA() == 13 {
-                let offset = ins.field_simm() as i32;
-                let address = if offset >= 0 {
-                    self.r13_addr.wrapping_add(offset as u32)
-                } else {
-                    self.r13_addr.wrapping_sub((-offset) as u32)
-                };
-    
-                if is_addr_in_section(dol_header, address) {
-                    self.labels.insert(address);
-                }
-            } else if is_load_store_reg_offset(ins, Some(13)) {
-                let simplified = ins.clone().simplified();
-                if simplified.args.len() >= 2 {
-                    if let Argument::Offset(o) = &simplified.args[1] {
-                        let offset = o.0;
-                        let address = if offset >= 0 {
-                            self.r13_addr.wrapping_add(offset as u32)
-                        } else {
-                            self.r13_addr.wrapping_sub((offset as i32).abs() as u32)
-                        };
-    
-                        if is_addr_in_section(dol_header, address) {
-                            self.labels.insert(address);
-                        }
-                    }
-                }
+        if ins.op == Opcode::Addi {
+            let base_address = if ins.field_rA() == 13 && self.r13_addr != 0 {
+                self.r13_addr
+            } else if ins.field_rA() == 2 && self.r2_addr != 0 {
+                self.r2_addr
+            } else {
+                return;
+            };
+
+            let offset = ins.field_simm() as i32;
+            let address = if offset >= 0 {
+                base_address.wrapping_add(offset as u32)
+            } else {
+                base_address.wrapping_sub((-offset) as u32)
+            };
+
+            if is_addr_in_section(dol_header, address) {
+                self.labels.insert(address);
             }
-        }
-    
-        if self.r2_addr != 0 {
-            if ins.op == Opcode::Addi && ins.field_rA() == 2 {
-                let offset = ins.field_simm() as i32;
-                let address = if offset >= 0 {
-                    self.r2_addr.wrapping_add(offset as u32)
-                } else {
-                    self.r2_addr.wrapping_sub((-offset) as u32)
-                };
-    
-                if is_addr_in_section(dol_header, address) {
-                    self.labels.insert(address);
-                }
-            } else if is_load_store_reg_offset(ins, Some(2)) {
-                let simplified = ins.clone().simplified();
-                if simplified.args.len() >= 2 {
-                    if let Argument::Offset(o) = &simplified.args[1] {
-                        let offset = o.0;
-                        let address = if offset >= 0 {
-                            self.r2_addr.wrapping_add(offset as u32)
-                        } else {
-                            self.r2_addr.wrapping_sub((offset as i32).abs() as u32)
-                        };
-    
-                        if is_addr_in_section(dol_header, address) {
-                            self.labels.insert(address);
-                        }
+        } else if let Some(rdest) = get_load_store_base_reg(&ins) {
+            let base_address = if rdest == 13 && self.r13_addr != 0 {
+                self.r13_addr
+            } else if rdest == 2 && self.r2_addr != 0 {
+                self.r2_addr
+            } else {
+                return;
+            };
+
+            let simplified = ins.clone().simplified();
+            if simplified.args.len() >= 2 {
+                if let Argument::Offset(o) = &simplified.args[1] {
+                    let offset = o.0;
+                    let address = if offset >= 0 {
+                        base_address.wrapping_add(offset as u32)
+                    } else {
+                        base_address.wrapping_sub((offset as i32).abs() as u32)
+                    };
+
+                    if is_addr_in_section(dol_header, address) {
+                        self.labels.insert(address);
                     }
                 }
             }
