@@ -199,15 +199,6 @@ impl Analyser {
             let prefix_comment = format!("/* {:08X} {:08X}  {:02X} {:02X} {:02X} {:02X} */", 
                 ins_addr, file_offset + ins_offset, ins_bytes[0], ins_bytes[1], ins_bytes[2], ins_bytes[3]);
 
-            if ins.op == Opcode::Illegal {
-                if ins.code == 0 {
-                    writeln!(dst, "{}\t.4byte 0x{:08X}", prefix_comment, ins.code)?;
-                } else {
-                    writeln!(dst, "{}\t.4byte 0x{:08X}  /* <ilegal> */", prefix_comment, ins.code)?;
-                }
-                continue;
-            }
-
             let ins_str = if let Ok(s) = self.format_instruction(&ins) {
                 s
             } else {
@@ -221,6 +212,16 @@ impl Analyser {
     }
 
     fn format_instruction(&self, ins: &Ins) -> Result<String, Box<dyn std::error::Error>> {
+        
+        if ins.op == Opcode::Illegal {
+            return Ok(if ins.code == 0 {
+                // Most likely alignment bytes
+                format!(".4byte 0x{:08X}", ins.code)
+            } else {
+                format!(".4byte 0x{:08X}  /* <ilegal> */", ins.code)
+            });
+        }
+
         // Special Case - Assembler doesn't handle the instruction mnemonic
         if ins.op == Opcode::Lmw && ins.field_rD() == 0 {
             return Ok(format!(".4byte 0x{:08X}  /* illegal {} */", ins.code, FormattedIns(ins.clone())))
