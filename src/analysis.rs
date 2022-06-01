@@ -55,11 +55,14 @@ impl Analyser {
                     self.add_label(branch_dest, format!("func_{:08X}", branch_dest))
                 }
             }
+
+            return;
         }
         
         if ins.op == Opcode::Addis && ins.field_rA() == 0 { // lis rD, 0x%%%
             // Record instruction that loads into register with 'lis'
             self.lis_insns.insert(ins.field_rD() as u32, ins.clone());
+            return;
         } else if (ins.op == Opcode::Addi && ins.field_rA() != 0 && self.lis_insns.contains_key(&(ins.field_rA() as u32)) || 
                    (ins.op == Opcode::Ori && !(ins.field_rA() == 0 && ins.field_rS() == 0 && ins.field_uimm() == 0) && self.lis_insns.contains_key(&(ins.field_rS() as u32)))) || 
                   (is_load_store(ins) && self.lis_insns.contains_key(&(get_load_store_base_reg_uncheked(ins) as u32))) {
@@ -106,7 +109,6 @@ impl Analyser {
                 if let Argument::GPR(r) = &simplified.args[0] {
                     self.lis_insns.remove(&(r.0 as u32));
                 }
-    
             }
         }
     
