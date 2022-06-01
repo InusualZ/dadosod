@@ -51,7 +51,7 @@ impl Analyser {
                 self.labels.insert(branch_dest);
 
                 // If it's branch that modifies the link register it's a function call
-                if ins.op == Opcode::B && ins.field_LK() {
+                if ins.op == Opcode::B {
                     self.add_label(branch_dest, format!("func_{:08X}", branch_dest))
                 }
             }
