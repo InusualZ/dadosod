@@ -14,14 +14,12 @@ pub struct DolCmd {
     dol_file_path: PathBuf,
 }
 
-// TODO: Handle error/result properly
-
 impl DolCmd {
     pub fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
         println!("Dadosods DOL\n");
 
-        let mut dol_file = File::open(&self.dol_file_path).unwrap();
-        let dol_header = DolHeaderData::read_from(&dol_file).unwrap();
+        let mut dol_file = File::open(&self.dol_file_path)?;
+        let dol_header = DolHeaderData::read_from(&dol_file)?;
         let text_sections_offset = &dol_header.section_offsets[0..7];
         let text_sections_target = &dol_header.section_targets[0..7];
         let text_sections_size = &dol_header.section_sizes[0..7];
@@ -35,8 +33,8 @@ impl DolCmd {
             // Read Section Data
             let section_size = text_sections_size[i] as usize;
             let mut section_data = vec![0u8; section_size];
-            dol_file.seek(std::io::SeekFrom::Start(text_sections_offset[i] as u64)).unwrap();
-            dol_file.read_exact(&mut section_data).unwrap();
+            dol_file.seek(std::io::SeekFrom::Start(text_sections_offset[i] as u64))?;
+            dol_file.read_exact(&mut section_data)?;
 
             analysis_data.analyze_text_section(&dol_header, &section_data, text_sections_target[i]);
         }
@@ -67,8 +65,8 @@ impl DolCmd {
             writeln!(section_file, ".section {}, \"ax\"  # 0x{:08X} - 0x{:08X} ; 0x{:08X}", section_name, start, end, size as u32)?;
 
             let mut section_data = vec![0u8; size as usize];
-            dol_file.seek(std::io::SeekFrom::Start(text_sections_offset[i] as u64)).unwrap();
-            dol_file.read_exact(&mut section_data).unwrap();
+            dol_file.seek(std::io::SeekFrom::Start(text_sections_offset[i] as u64))?;
+            dol_file.read_exact(&mut section_data)?;
             analysis_data.write_text_section(&mut section_file, &section_data, start, text_sections_offset[i])?;
         }
 
@@ -90,8 +88,8 @@ impl DolCmd {
             writeln!(section_file, ".section {}, \"wa\"  # 0x{:08X} - 0x{:08X} ; 0x{:08X}", section_name, start, end, size as u32)?;
 
             let mut section_data = vec![0u8; size as usize];
-            dol_file.seek(std::io::SeekFrom::Start(data_sections_offset[i] as u64)).unwrap();
-            dol_file.read_exact(&mut section_data).unwrap();
+            dol_file.seek(std::io::SeekFrom::Start(data_sections_offset[i] as u64))?;
+            dol_file.read_exact(&mut section_data)?;
             analysis_data.write_data_section(&mut section_file, &section_data, start, data_sections_offset[i], &dol_file_name)?;
         }
 
