@@ -8,6 +8,19 @@
    - Guess/Calculate common sections name
    - Divide each section into his own file
 
+# Usage
+
+### Command Line Options
+|Command|Description|
+|-|-|
+|`dadosod dol`|[Dissassembly a dol excecutable](#dols-command-options)|
+
+### Dol's command options
+|Command|Description||
+|-|-|-|
+|`<dol_file_path>`|[Path of the dol file]()|**Required**|
+
+
 # Planned Features
  - Disassembly DOL
    - Detect `.init`'s `_rom_copy_info` and `_bss_init_info` (**Wii Only**)
