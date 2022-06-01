@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 
 # TODO: Upstream needed changes
-ppc750cl = { version='0.2.0', path='..\ppc750cl\disasm' }
-dol = { version='0.1.0', path='..\ppc750cl\dol' }
+ppc750cl = { git="https://github.com/terorie/ppc750cl", rev="619c935dc4979ff54abad7ee99412c2e257c03ab", package='ppc750cl' }
+dol = { git="https://github.com/terorie/ppc750cl", rev="619c935dc4979ff54abad7ee99412c2e257c03ab", package='dol' }
 
 argh = "0.1"

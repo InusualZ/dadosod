@@ -58,6 +58,7 @@ dependencies = [
 [[package]]
 name = "dol"
 version = "0.1.0"
+source = "git+https://github.com/terorie/ppc750cl?rev=619c935dc4979ff54abad7ee99412c2e257c03ab#619c935dc4979ff54abad7ee99412c2e257c03ab"
 dependencies = [
  "bincode",
  "serde",
@@ -85,6 +86,7 @@ dependencies = [
 [[package]]
 name = "ppc750cl"
 version = "0.2.0"
+source = "git+https://github.com/terorie/ppc750cl?rev=619c935dc4979ff54abad7ee99412c2e257c03ab#619c935dc4979ff54abad7ee99412c2e257c03ab"
 dependencies = [
  "num-traits",
  "serde",
