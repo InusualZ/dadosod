@@ -47,11 +47,11 @@ impl Analyser {
             self.lis_insns.clear();
     
             if is_addr_in_section(dol_header, branch_dest.clone()) {
-                // Minimum it's a conditional branch and we insert it for being part of a function
+                // Since at least is a branch into a known section treat it as a label
                 self.labels.insert(branch_dest);
 
-                // If it's branch that modifies the link register it's a function call
-                if ins.op == Opcode::B {
+                // if is not a conditional branch, treat it as a function
+                if ins.op == Opcode::B || ins.field_BO() == 20 {
                     self.add_label(branch_dest, format!("func_{:08X}", branch_dest))
                 }
             }
