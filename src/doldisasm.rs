@@ -164,21 +164,6 @@ fn calculate_section_names(dol_file: &mut Dol) -> BTreeMap<usize, String> {
     let bss_section_index = sections.iter().position(|s| s.kind == DolSectionType::Bss).unwrap();
 
     let section_after_bss_count = sections.iter().skip(bss_section_index + 1).count();
-    
-    // Set the correct size to the bss size
-    if section_after_bss_count >= 1 {
-        // Since the bss "section" given by the dol is simply the size of the range created by the 
-        // elf's bss section start address and the end address of the last bss (NOBITS) section,
-        // we can calculate the real size, by substracting the next section's start address and the bss
-        // section target address
-
-        let bss_section = &sections[bss_section_index];
-        let section_after = &sections[bss_section_index + 1];
-        let bss_size = section_after.target - bss_section.target;
-
-        let bss_section = &mut sections[bss_section_index];
-        bss_section.size = bss_size;
-    }
 
     if section_after_bss_count == 2 {
         // The Wii/GC SDK generate a little bit of content for the `.sdata` and `.sdata2` section
@@ -250,6 +235,21 @@ fn calculate_section_names(dol_file: &mut Dol) -> BTreeMap<usize, String> {
         }
     } else {
         println!("WARNING! Unexpected number `{}` of section were found after the `.bss` section", section_after_bss_count);
+    }
+
+    // Set the correct size to the bss size
+    if section_after_bss_count >= 1 {
+        // Since the bss "section" given by the dol is simply the size of the range created by the 
+        // elf's bss section start address and the end address of the last bss (NOBITS) section,
+        // we can calculate the real size, by substracting the next section's start address and the bss
+        // section target address
+
+        let bss_section = &sections[bss_section_index];
+        let section_after = &sections[bss_section_index + 1];
+        let bss_size = section_after.target - bss_section.target;
+
+        let bss_section = &mut sections[bss_section_index];
+        bss_section.size = bss_size;
     }
 
     let mut last_text_section_index = 0;
