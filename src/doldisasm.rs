@@ -1,4 +1,4 @@
-use std::{path::PathBuf, fs::{File, OpenOptions}};
+use std::{path::{PathBuf, Path}, fs::{File, OpenOptions}};
 use std::io::Write;
 use argh::FromArgs;
 use dol::{Dol, DolSectionType};
@@ -41,7 +41,7 @@ impl DolCmd {
 
         let macro_file_path = asm_path.join("macros.inc");
         {
-            let mut macro_file = OpenOptions::new().write(true).truncate(true).create(true).open(&macro_file_path)?;
+            let mut macro_file = create_file(&macro_file_path)?;
             self.write_macro_file(&mut macro_file, &dol_file, &analysis_data)?;
         }
 
@@ -50,7 +50,7 @@ impl DolCmd {
             let section_name = calculate_section_name(section.index, text_sections_count, false);
             let section_file_name = format!("{}.s", section_name.replace(".", ""));
             let section_file_path = asm_path.join(section_file_name);
-            let mut section_file = OpenOptions::new().write(true).truncate(true).create(true).open(&section_file_path)?;
+            let mut section_file = create_file(&section_file_path)?;
             let start = section.target;
             let size = section.size;
             let end = start + size;
@@ -67,7 +67,7 @@ impl DolCmd {
             let section_name = calculate_section_name(section.index - 7, data_sections_count, true);
             let section_file_name = format!("{}.s", section_name.replace(".", ""));
             let section_file_path = asm_path.join(section_file_name);
-            let mut section_file = OpenOptions::new().write(true).truncate(true).create(true).open(&section_file_path)?;
+            let mut section_file = create_file(&section_file_path)?;
             let start = section.target;
             let size = section.size;
             let end = start + size;
@@ -91,7 +91,7 @@ impl DolCmd {
 
             let section_file_name = format!("{}.s", section_name.replace(".", ""));
             let section_file_path = asm_path.join(section_file_name);
-            let mut section_file = OpenOptions::new().write(true).truncate(true).create(true).open(&section_file_path)?;
+            let mut section_file = create_file(&section_file_path)?;
             let start = section.target;
             let size = section.size;
             let end = start + size;
@@ -213,4 +213,12 @@ fn calculate_section_name(index: usize, count: usize, is_data_section: bool) -> 
             _ => format!(".text{}", index-1)
         }
     }
+}
+
+#[inline]
+fn create_file<P>(path: P) -> std::io::Result<File>
+where
+    P: AsRef<Path> 
+{
+    OpenOptions::new().write(true).truncate(true).create(true).open(&path)
 }
