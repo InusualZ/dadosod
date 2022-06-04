@@ -1,7 +1,7 @@
-use std::{path::{PathBuf, Path}, fs::{File, OpenOptions}};
+use std::{path::{PathBuf, Path}, fs::{File, OpenOptions}, collections::BTreeMap};
 use std::io::Write;
 use argh::FromArgs;
-use dol::{Dol, DolSectionType};
+use dol::{Dol, DolSectionType, DolSection};
 
 use crate::analysis::Analyser;
 
@@ -17,7 +17,11 @@ pub struct DolCmd {
 impl DolCmd {
     pub fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
         let dol_file = File::open(&self.dol_file_path)?;
-        let dol_file = Dol::read_from(&dol_file)?;
+        let mut dol_file = Dol::read_from(&dol_file)?;
+
+        // Try giving each section a name
+        let section_name_map = calculate_section_names(&mut dol_file);
+        assert_eq!(section_name_map.len(), dol_file.header.sections.len());
 
         // Analyse sections
         let mut analysis_data = Analyser::new(dol_file.header.entry_point);
@@ -27,7 +31,6 @@ impl DolCmd {
                 continue;
             }
 
-            // Read Section Data
             let section_data = dol_file.section_data(section);
             analysis_data.analyze_text_section(&dol_file, &section_data, section.target);
         }
@@ -39,15 +42,17 @@ impl DolCmd {
         let asm_path = dol_parent_path.join("asm");
         std::fs::create_dir_all(&asm_path)?;
 
-        let macro_file_path = asm_path.join("macros.inc");
+        let include_path = dol_parent_path.join("include");
+        std::fs::create_dir_all(&include_path)?;
+
+        let macro_file_path = include_path.join("macros.inc");
         {
             let mut macro_file = create_file(&macro_file_path)?;
-            self.write_macro_file(&mut macro_file, &dol_file, &analysis_data)?;
+            self.write_macro_file(&mut macro_file, &dol_file, &section_name_map, &analysis_data)?;
         }
 
-        let text_sections_count = dol_file.header.sections.iter().filter(|s| s.kind == DolSectionType::Text).count();
-        for section in dol_file.header.sections.iter().filter(|s| s.kind == DolSectionType::Text) {
-            let section_name = calculate_section_name(section.index, text_sections_count, false);
+        for (si, section) in dol_file.header.sections.iter().enumerate() {
+            let section_name = section_name_map.get(&si).unwrap();
             let section_file_name = format!("{}.s", section_name.replace(".", ""));
             let section_file_path = asm_path.join(section_file_name);
             let mut section_file = create_file(&section_file_path)?;
@@ -55,94 +60,39 @@ impl DolCmd {
             let size = section.size;
             let end = start + size;
 
-            writeln!(section_file, ".include \"macros.inc\"\n")?;
-            writeln!(section_file, ".section {}, \"ax\"  # 0x{:08X} - 0x{:08X} ; 0x{:08X}", section_name, start, end, size as u32)?;
-
-            let section_data = dol_file.section_data(section);
-            analysis_data.write_text_section(&mut section_file, &section_data, start, section.offset)?;
-        }
-
-        let data_sections_count = dol_file.header.sections.iter().filter(|s| s.kind == DolSectionType::Data).count();
-        for section in dol_file.header.sections.iter().filter(|s| s.kind == DolSectionType::Data) {
-            let section_name = calculate_section_name(section.index - 7, data_sections_count, true);
-            let section_file_name = format!("{}.s", section_name.replace(".", ""));
-            let section_file_path = asm_path.join(section_file_name);
-            let mut section_file = create_file(&section_file_path)?;
-            let start = section.target;
-            let size = section.size;
-            let end = start + size;
-
-            writeln!(section_file, ".include \"macros.inc\"\n")?;
-            writeln!(section_file, ".section {}, \"wa\"  # 0x{:08X} - 0x{:08X} ; 0x{:08X}", section_name, start, end, size as u32)?;
-
-            let section_data = dol_file.section_data(section);
-            analysis_data.write_data_section(&mut section_file, &section_data, start, section.offset, &dol_file_name)?;
-        }
-
-
-        // Write .bss, .sbss, .sbss2 sections
-        let mut bss_index = 0;
-        for section in dol_file.header.sections.iter().filter(|s| s.kind == DolSectionType::Bss) {
-            let section_name = if bss_index == 0 {
-                ".bss".into()
-            } else {
-                format!(".bss{}", bss_index)
+            let section_type: String = match section.kind {
+                DolSectionType::Text => "\"ax\"".into(),
+                DolSectionType::Data => "\"wa\"".into(),
+                DolSectionType::Bss => "\"\", @nobits".into(),
             };
 
-            let section_file_name = format!("{}.s", section_name.replace(".", ""));
-            let section_file_path = asm_path.join(section_file_name);
-            let mut section_file = create_file(&section_file_path)?;
-            let start = section.target;
-            let size = section.size;
-            let end = start + size;
-
             writeln!(section_file, ".include \"macros.inc\"\n")?;
-            writeln!(section_file, ".section {}, \"wa\"  # 0x{:08X} - 0x{:08X} ; 0x{:08X}", section_name, start, end, size as u32)?;
+            writeln!(section_file, ".section {}, {}  # 0x{:08X} - 0x{:08X} ; 0x{:08X}\n", section_name, section_type, start, end, size as u32)?;
 
-            analysis_data.write_bss_section(&mut section_file, size, start)?;
+            let section_data = dol_file.section_data(section);
 
-            bss_index += 1;
+            match section.kind {
+                DolSectionType::Text => analysis_data.write_text_section(&mut section_file, &section_data, start, section.offset)?,
+                DolSectionType::Data => analysis_data.write_data_section(&mut section_file, &section_data, start, section.offset, &dol_file_name)?,
+                DolSectionType::Bss => analysis_data.write_bss_section(&mut section_file, size, start)?,
+            }
         }
 
         Ok(())
     }
 
-    fn write_macro_file<W>(&self, dst: &mut W, dol_file: &Dol, analysis_data: &Analyser) -> Result<(), Box<dyn std::error::Error>>
+    fn write_macro_file<W>(&self, dst: &mut W, dol_file: &Dol, section_name_map: &BTreeMap<usize, String>, analysis_data: &Analyser) -> Result<(), Box<dyn std::error::Error>>
     where
         W: Write,
     {
         writeln!(dst, "/*")?;
-        writeln!(dst, "Code sections:")?;
+        writeln!(dst, "Sections:")?;
 
-        let text_sections_count = dol_file.header.sections.iter().filter(|s| s.kind == DolSectionType::Text).count();
-        for section in dol_file.header.sections.iter().filter(|s| s.kind == DolSectionType::Text) {
-            let section_name = calculate_section_name(section.index, text_sections_count, false);
+        for (si, section) in dol_file.header.sections.iter().enumerate() {
+            let section_name = section_name_map.get(&si).unwrap();
             write!(dst, "\t{:<12}", section_name)?;
             writeln!(dst, "0x{:08X}  0x{:08X}  0x{:08X}", section.offset, section.target, 
             section.target + section.size)?;
-        }
-
-        writeln!(dst, "Data sections:")?;
-
-        let data_sections_count = dol_file.header.sections.iter().filter(|s| s.kind == DolSectionType::Data).count();
-        for section in dol_file.header.sections.iter().filter(|s| s.kind == DolSectionType::Data) {
-            write!(dst, "\t{:<12}", calculate_section_name(section.index - 7, data_sections_count, true))?;
-            writeln!(dst, "0x{:08X}  0x{:08X}  0x{:08X}", section.offset, section.target, 
-            section.target + section.size)?;
-        }
-
-        writeln!(dst, "BSS section:")?;
-
-        let mut bss_index = 0;
-        for section in dol_file.header.sections.iter().filter(|s| s.kind == DolSectionType::Bss) {
-            let section_name = if bss_index == 0 {
-                ".bss".into()
-            } else {
-                format!(".bss{}", bss_index)
-            };
-
-            writeln!(dst, "\t{:<12}0x{:08X}  0x{:08X}  0x{:08X}", section_name, section.offset, section.target, section.target + section.size)?;
-            bss_index += 1;
         }
 
         writeln!(dst, "Entry Point: 0x{:08X}", dol_file.header.entry_point)?;
@@ -178,41 +128,208 @@ impl DolCmd {
 
 }
 
+
 /// CodeWarrior/MetroWerks compiler emit a limited set of section so for 
 /// most game we can infer them. **THIS IS NOT EXPECTED TO BE PERFECT**
-fn calculate_section_name(index: usize, count: usize, is_data_section: bool) -> String {
-    if is_data_section {
-        let section_index_offset = match count {
-            8 => 0, // extab,extabindex,.ctors,.dtors,.rodata,.data,.sdata,.sdata2
-            7 => 0, // extab,extabindex,.ctors,.dtors,.rodata,.data,.sdata
-            6 => 2, // .ctors,.dtors,.rodata,.data,.sdata,.sdata2
-            5 => 2, // .ctors,.dtors,.rodata,.data,.sdata
-            4 => 2, // .ctors,.dtors,.rodata,.data
-            _ => usize::max_value()
-        };
+fn calculate_section_names(dol_file: &mut Dol) -> BTreeMap<usize, String> {
+    let mut names_map: BTreeMap<usize, String> = Default::default();
 
-        if section_index_offset == usize::max_value() {
-            return format!(".data{}", index);
-        }
+    let sections = &mut dol_file.header.sections;
 
-        match section_index_offset + index {
-            0 => String::from("extab_"),
-            1 => String::from("extabindex_"),
-            2 => String::from(".ctors"),
-            3 => String::from(".dtors"),
-            4 => String::from(".rodata"),
-            5 => String::from(".data"),
-            6 => String::from(".sdata"),
-            7 => String::from(".sdata2"),
-            _ => unreachable!()
-        }
-    } else {
-        match index {
-            0 => String::from(".init"),
-            1 => String::from(".text"),
-            _ => format!(".text{}", index-1)
+    // In any case, Use a dummy name for the text sections
+    let mut bss_counter = 0usize;
+    {
+        let mut text_counter = 0usize;
+        let mut data_counter = 0usize;
+        for (si, section) in sections.iter().enumerate() {
+            match section.kind {
+                DolSectionType::Text => {
+                    names_map.insert(si, format!(".text{}", text_counter));
+                    text_counter += 1;
+                },
+                DolSectionType::Data => {
+                    names_map.insert(si, format!(".data{}", data_counter));
+                    data_counter += 1;
+                },
+                DolSectionType::Bss => {
+                    assert_eq!(bss_counter, 0);
+                    names_map.insert(si, ".bss".into());
+                    bss_counter += 1;
+                },
+            }
         }
     }
+    
+    assert_eq!(bss_counter, 1);
+    let bss_section_index = sections.iter().position(|s| s.kind == DolSectionType::Bss).unwrap();
+
+    let section_after_bss_count = sections.iter().skip(bss_section_index + 1).count();
+    if section_after_bss_count == 2 {
+        // The Wii/GC SDK generate a little bit of content for the `.sdata` and `.sdata2` section
+        // So, there should always be atleast does two section
+
+        // How are we calculating the `.sbss` and `.sbss2` section?
+        // The CodeWarrior/Metrowerks compiler order the `.sbss` and `.sbss2` like so:
+        //     .bss
+        //     .sdata
+        //     .sbss
+        //     .sdata2
+        //     .sbss2 (optional)
+        // The things is that this section are unified into a singular section and that
+        // unified section's size is calculated like so:
+        //     unified_bss_size = last_bss_section_rom_end - bss_rom
+        // With this information we can divide the dol's bss section back into his original form
+
+        let sdata_section_index = bss_section_index + 1;
+        let mut sdata2_section_index = bss_section_index + 2;
+        let sdata_section = &sections[sdata_section_index];
+        let sdata2_section = &sections[sdata2_section_index];
+
+        let bss_section = &sections[bss_section_index];
+        let mut bss_size = bss_section.size;
+        let bss_section_rom_end = bss_section.target + bss_section.size;
+        let sdata2_rom_end = sdata2_section.target + sdata2_section.size;
+
+        // Since the bss "section" given by the dol is simply the size of the range created by the 
+        // elf's bss section start address and the end address of the last bss (NOBITS) section,
+        // we have to substract those section to get the real (aligned) size of the `.bss` section
+
+        bss_size -= sdata_section.size;
+        bss_size -= sdata2_section.size;
+
+        // Set the sdata section name
+        names_map.insert(sdata_section_index, ".sdata".into());
+
+        // Calculate sbss section
+        let sdata_rom_end = sdata_section.target + sdata_section.size;
+        let sbss_size = sdata2_section.target - sdata_rom_end;
+        if sbss_size > 0 {
+            // Insert .sbss section name
+            names_map.insert(sdata2_section_index, ".sbss".into());
+
+            // We are going to introduce a new section to the dol, so we have to give the sdata2 section a new index
+            sdata2_section_index += 1;
+
+            // Insert newly discover section
+            let sbss_target = sdata_rom_end;
+            sections.insert(sdata_section_index + 1, DolSection { 
+                kind: DolSectionType::Bss, 
+                index: 0,
+                offset: 0,
+                target: sbss_target,
+                size: sbss_size 
+            });
+
+            bss_size -= sbss_size;
+        }
+
+        // Insert sdata2 section name
+        names_map.insert(sdata2_section_index, ".sdata2".into());
+
+        // Calculate sbss2 size
+        let sbss2_size = bss_section_rom_end - sdata2_rom_end;
+        if sbss2_size > 0 {
+            // Insert `.sbss2` section name
+            names_map.insert(sdata2_section_index + 1, ".sbss2".into());
+
+            // Insert newly discover section
+            let sbss2_target = bss_section_rom_end - sbss2_size;
+            sections.push(DolSection { 
+                kind: DolSectionType::Bss, 
+                index: 0,
+                offset: 0,
+                target: sbss2_target,
+                size: sbss2_size 
+            });
+
+            bss_size -= sbss2_size;
+        }
+
+        // Set the correct size to the bss section
+        let bss_section = &mut sections[bss_section_index];
+        bss_section.size = bss_size;
+    } else {
+        println!("WARNING! Too many section were found `{}` after the `.bss` section", section_after_bss_count);
+    }
+
+    let mut last_text_section_index = 0;
+
+    // How many text section? We are only expecting `.init`
+    let text_section_count = sections.iter().filter(|s| s.kind == DolSectionType::Text).count();
+    if text_section_count == 2 {
+        let init_section_index = 0usize;
+
+        // The CodeWarrior/MetroWerk compiler emit the text section like so:
+        //     [0] .init (required)
+        //     [1] .extab (optional)
+        //     [2] .extabindex (optional)
+        //     [3] .text (required)
+
+        let text_section_index = if sections[init_section_index + 1].kind == DolSectionType::Text {
+            init_section_index + 1
+        } else {
+            init_section_index + 3
+        };
+
+        last_text_section_index = text_section_index;
+
+        let text_section = &sections[text_section_index];
+        if text_section.kind == DolSectionType::Text {
+            names_map.insert(init_section_index, ".init".into());
+            names_map.insert(text_section_index, ".text".into());
+
+            // How many section between the `.init` and `.text` section
+            if text_section_index - init_section_index - 1 == 2 {
+                // Make sure that the two section in-between are data section
+                if sections.iter().skip(init_section_index + 1).take(2).filter(|s| s.kind == DolSectionType::Data).count() == 2 {
+                    // Mark them as `extab` and `extabindex`
+                    // We have to add a `_`, because if manually linking those data section
+                    // the linker would throw error because does section are suppose to be auto-generated
+                    names_map.insert(init_section_index + 1, "extab_".into());
+                    names_map.insert(init_section_index + 2, "extabindex_".into());
+                } else {
+                    println!("WARNING! Unknown section type was found between the two expected data section");
+                }
+            }
+        } else {
+            println!("WARNING! Unknown Section ({:?}, {:#X}, 0x{:08X}, {:#X})", text_section.kind, text_section.offset, text_section.target, text_section.size);
+        }
+    } else {
+        println!("WARNING! Too many text section were found `{}`", text_section_count);
+        for section in sections.iter().enumerate() {
+            if section.1.kind == DolSectionType::Text {
+                last_text_section_index = section.0;
+            }
+        }
+    }
+
+    // CodeWarrior/MetroWerks compiler emit the remaining .data section like so:
+    //     .text (last_text_section_index)
+    //     .ctors
+    //     .dtors
+    //     .file (only seen in ogws)
+    //     .rodata
+    //     .data
+    //     .bss (bss_section_index)
+
+    let data_section_count = bss_section_index - last_text_section_index - 1;
+    if data_section_count == 5 {
+        names_map.insert(last_text_section_index + 1, ".ctors".into());
+        names_map.insert(last_text_section_index + 2, ".dtors".into());
+        names_map.insert(last_text_section_index + 3, ".file".into());
+        names_map.insert(last_text_section_index + 4, ".rodata".into());
+        names_map.insert(last_text_section_index + 5, ".data".into());
+    } else if data_section_count == 4 {
+        names_map.insert(last_text_section_index + 1, ".ctors".into());
+        names_map.insert(last_text_section_index + 2, ".dtors".into());
+        names_map.insert(last_text_section_index + 3, ".rodata".into());
+        names_map.insert(last_text_section_index + 4, ".data".into());
+    } else {
+        println!("WARNING! Unknown data section count `{}` were found between the `.text` and `.bss` section", data_section_count);
+    }
+
+
+    return names_map;
 }
 
 #[inline]

@@ -2,7 +2,7 @@ use std::io::Write as IoWrite;
 use std::fmt::Write as FmtWrite;
 
 use ppc750cl::{self, Ins, Opcode, Argument, formatter::FormattedIns};
-use dol::{DolHeaderData, Dol, DolSectionType};
+use dol::{Dol, DolSectionType};
 
 pub struct Analyser {
     pub r2_addr: u32,
