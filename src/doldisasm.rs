@@ -164,6 +164,22 @@ fn calculate_section_names(dol_file: &mut Dol) -> BTreeMap<usize, String> {
     let bss_section_index = sections.iter().position(|s| s.kind == DolSectionType::Bss).unwrap();
 
     let section_after_bss_count = sections.iter().skip(bss_section_index + 1).count();
+    
+    // Set the correct size to the bss size
+    if section_after_bss_count >= 1 {
+        // Since the bss "section" given by the dol is simply the size of the range created by the 
+        // elf's bss section start address and the end address of the last bss (NOBITS) section,
+        // we can calculate the real size, by substracting the next section's start address and the bss
+        // section target address
+
+        let bss_section = &sections[bss_section_index];
+        let section_after = &sections[bss_section_index + 1];
+        let bss_size = section_after.target - bss_section.target;
+
+        let bss_section = &mut sections[bss_section_index];
+        bss_section.size = bss_size;
+    }
+
     if section_after_bss_count == 2 {
         // The Wii/GC SDK generate a little bit of content for the `.sdata` and `.sdata2` section
         // So, there should always be atleast does two section
@@ -186,16 +202,8 @@ fn calculate_section_names(dol_file: &mut Dol) -> BTreeMap<usize, String> {
         let sdata2_section = &sections[sdata2_section_index];
 
         let bss_section = &sections[bss_section_index];
-        let mut bss_size = bss_section.size;
         let bss_section_rom_end = bss_section.target + bss_section.size;
         let sdata2_rom_end = sdata2_section.target + sdata2_section.size;
-
-        // Since the bss "section" given by the dol is simply the size of the range created by the 
-        // elf's bss section start address and the end address of the last bss (NOBITS) section,
-        // we have to substract those section to get the real (aligned) size of the `.bss` section
-
-        bss_size -= sdata_section.size;
-        bss_size -= sdata2_section.size;
 
         // Set the sdata section name
         names_map.insert(sdata_section_index, ".sdata".into());
@@ -219,8 +227,6 @@ fn calculate_section_names(dol_file: &mut Dol) -> BTreeMap<usize, String> {
                 target: sbss_target,
                 size: sbss_size 
             });
-
-            bss_size -= sbss_size;
         }
 
         // Insert sdata2 section name
@@ -241,15 +247,9 @@ fn calculate_section_names(dol_file: &mut Dol) -> BTreeMap<usize, String> {
                 target: sbss2_target,
                 size: sbss2_size 
             });
-
-            bss_size -= sbss2_size;
         }
-
-        // Set the correct size to the bss section
-        let bss_section = &mut sections[bss_section_index];
-        bss_section.size = bss_size;
     } else {
-        println!("WARNING! Too many section were found `{}` after the `.bss` section", section_after_bss_count);
+        println!("WARNING! Unexpected number `{}` of section were found after the `.bss` section", section_after_bss_count);
     }
 
     let mut last_text_section_index = 0;
