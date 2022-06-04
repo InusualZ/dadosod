@@ -23,6 +23,13 @@ impl DolCmd {
         let section_name_map = calculate_section_names(&mut dol_file);
         assert_eq!(section_name_map.len(), dol_file.header.sections.len());
 
+        println!("Sections:");
+        for (si, section) in dol_file.header.sections.iter().enumerate() {
+            let section_name = section_name_map.get(&si).unwrap();
+            println!("[{:2}] => {:<12} 0x{:08X} 0x{:08X} 0x{:08X} 0x{:08X}", si, section_name, 
+            section.offset, section.target, section.target + section.size, section.size);
+        }
+
         // Analyse sections
         let mut analysis_data = Analyser::new(dol_file.header.entry_point);
 
