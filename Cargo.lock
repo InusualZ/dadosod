@@ -58,7 +58,7 @@ dependencies = [
 [[package]]
 name = "dol"
 version = "0.1.0"
-source = "git+https://github.com/terorie/ppc750cl?rev=619c935dc4979ff54abad7ee99412c2e257c03ab#619c935dc4979ff54abad7ee99412c2e257c03ab"
+source = "git+https://github.com/InusualZ/ppc750cl?branch=dol-improv#3741eed2009e655dd0b4290d861ecfecbfc4065d"
 dependencies = [
  "bincode",
  "serde",
@@ -86,7 +86,7 @@ dependencies = [
 [[package]]
 name = "ppc750cl"
 version = "0.2.0"
-source = "git+https://github.com/terorie/ppc750cl?rev=619c935dc4979ff54abad7ee99412c2e257c03ab#619c935dc4979ff54abad7ee99412c2e257c03ab"
+source = "git+https://github.com/InusualZ/ppc750cl?branch=dol-improv#3741eed2009e655dd0b4290d861ecfecbfc4065d"
 dependencies = [
  "num-traits",
  "serde",
