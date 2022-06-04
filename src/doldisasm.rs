@@ -85,6 +85,12 @@ impl DolCmd {
             }
         }
 
+        {
+            println!("\nWriting Linker Script");
+            let mut linker_script_file = create_file(dol_parent_path.join("ldscript.lcf"))?;
+            write_linker_script_file(&mut linker_script_file, &dol_file, &section_name_map)?;
+        }
+
         Ok(())
     }
 
@@ -135,6 +141,52 @@ impl DolCmd {
 
 }
 
+fn write_linker_script_file<W>(dst: &mut W, dol_file: &Dol, section_name_map: &BTreeMap<usize, String>) -> Result<(), Box<dyn std::error::Error>>
+    where
+        W: Write,
+    {
+        writeln!(dst, "MEMORY\n{{\ntext : origin = 0x{:08X}\n}}\n", &dol_file.header.sections[0].target)?;
+        writeln!(dst, "SECTIONS\n{{")?;
+        writeln!(dst, "\tGROUP:\n\t{{")?;
+
+        let mut last_section_end = dol_file.header.sections[0].target;
+        for (si, section) in dol_file.header.sections.iter().enumerate() {
+            let section_name = section_name_map.get(&si).unwrap();
+            let section_align = if last_section_end == section.target {
+                0x20
+            } else if align(last_section_end, 0x80) == section.target {
+                0x80
+            } else if align(last_section_end, 0x40) == section.target {
+                0x40
+            } else {
+                println!("Unknown alignment for `{}`", section_name);
+                0x20
+            };
+
+            writeln!(dst, "\t\t{:<12} ALIGN({:#X}) : {{}}", section_name, section_align)?;
+            last_section_end = section.target + section.size;
+        }
+
+        writeln!(dst, "\t\t{:<12} ALIGN({:#X}) : {{}}", ".stack", 0x100)?;
+        writeln!(dst, "\t}} > text\n")?; // GROUP
+
+        let last_section_name = section_name_map.get(&(dol_file.header.sections.len() - 1)).unwrap();
+        let last_section_name_sanitized = last_section_name.replace(".", "_");
+        
+        writeln!(dst, "\t_stack_addr = (_f{} + SIZEOF({}) + 65536 + 0x7) & ~0x7;", last_section_name_sanitized, last_section_name)?;
+        writeln!(dst, "\t_stack_end = _f{} + SIZEOF({});", last_section_name_sanitized, last_section_name)?;
+        writeln!(dst, "\t_db_stack_addr = (_stack_addr + 0x2000);")?;
+        writeln!(dst, "\t_db_stack_end = _stack_addr;")?;
+        writeln!(dst, "\t__ArenaLo = (_db_stack_addr + 0x1f) & ~0x1f;")?;
+        writeln!(dst, "\t__ArenaHi = 0x81700000;")?;
+
+        writeln!(dst, "}}")?; // SECTIONS
+        Ok(())
+    }
+
+fn align(address: u32, alignment: u32) -> u32 {
+    !(alignment - 1u32) & (alignment + address) - 1 
+}
 
 /// CodeWarrior/MetroWerks compiler emit a limited set of section so for 
 /// most game we can infer them. **THIS IS NOT EXPECTED TO BE PERFECT**
