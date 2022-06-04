@@ -2,7 +2,7 @@ use std::io::Write as IoWrite;
 use std::fmt::Write as FmtWrite;
 
 use ppc750cl::{self, Ins, Opcode, Argument, formatter::FormattedIns};
-use dol::DolHeaderData;
+use dol::{DolHeaderData, Dol, DolSectionType};
 
 pub struct Analyser {
     pub r2_addr: u32,
@@ -33,13 +33,13 @@ impl Analyser {
         data
     }
 
-    pub fn analyze_text_section(&mut self, dol_header: &DolHeaderData, code: &[u8], code_address: u32) {
+    pub fn analyze_text_section(&mut self, dol_header: &Dol, code: &[u8], code_address: u32) {
         for ins in ppc750cl::disasm_iter(code, code_address) {
             self.calculate_labels(&dol_header, &ins);
         }
     }
 
-    fn calculate_labels(&mut self, dol_header: &DolHeaderData, ins: &Ins) {
+    fn calculate_labels(&mut self, dol_header: &Dol, ins: &Ins) {
  
         // Detect Branches
         if matches!(ins.op, Opcode::B | Opcode::Bc) {
@@ -457,34 +457,31 @@ impl Analyser {
 
 }
 
-pub fn is_addr_in_section(dol: &DolHeaderData, addr: u32) -> bool {
-    let section_offset = if addr & 3 == 0 {
-        0 // If addr is multiple of 4, it could be a instruction
-    } else {
-        7 // else is a data address
-    };
-
+pub fn is_addr_in_section(dol: &Dol, addr: u32) -> bool {
     // Check if it's inside on of the sections
-    for i in section_offset..dol.section_sizes.len() {
-        if addr >= dol.section_targets[i] && addr < dol.section_targets[i] + dol.section_sizes[i] {
+    for section in &dol.header.sections {
+        if section.kind == DolSectionType::Text && (addr & 3) != 0 {
+            continue;
+        }
+
+        if addr >= section.target && addr < section.target + section.size {
             return true;
         }
     }
 
-    // Check if it's inside the bss section
-    return addr >= dol.bss_target && addr < dol.bss_target + dol.bss_size
+    return false;
 }
 
 // Check if label address belong to the same section than the instruction
-pub fn is_label_addr_in_ins_section(dol: &DolHeaderData, label_addr: u32, ins_addr: u32) -> bool {
-    for i in 0..dol.section_sizes.len() {
-        let start = dol.section_targets[i];
-        let size =  dol.section_sizes[i];
+pub fn is_label_addr_in_ins_section(dol: &Dol, label_addr: u32, ins_addr: u32) -> bool {
+    for section in &dol.header.sections {
+        let start = section.target;
+        let size =  section.size;
         if size == 0 {
             continue;
         }
 
-        let end = dol.section_targets[i] + size;
+        let end = start + size;
         if label_addr >= start && label_addr < end {
             return ins_addr >= start && ins_addr < end;
         }
