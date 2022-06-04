@@ -21,6 +21,7 @@ enum DadosodSubCmd {
 
 fn main() {
     let cmd: DadosodCmd = argh::from_env();
+    println!("Dadosods v{}\n", env!("CARGO_PKG_VERSION"));
     match cmd.executable {
         DadosodSubCmd::Dol(d) => d.run().unwrap(),
     }

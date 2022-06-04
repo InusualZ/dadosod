@@ -16,8 +16,6 @@ pub struct DolCmd {
 
 impl DolCmd {
     pub fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Dadosods DOL\n");
-
         let dol_file = File::open(&self.dol_file_path)?;
         let dol_file = Dol::read_from(&dol_file)?;
 
