@@ -91,8 +91,8 @@ impl DolCmd {
         for (si, section) in dol_file.header.sections.iter().enumerate() {
             let section_name = section_name_map.get(&si).unwrap();
             write!(dst, "\t{:<12}", section_name)?;
-            writeln!(dst, "0x{:08X}  0x{:08X}  0x{:08X}", section.offset, section.target, 
-            section.target + section.size)?;
+            writeln!(dst, "0x{:08X}  0x{:08X}  0x{:08X}  0x{:08X}", section.offset, section.target, 
+            section.target + section.size, section.size)?;
         }
 
         writeln!(dst, "Entry Point: 0x{:08X}", dol_file.header.entry_point)?;
