@@ -7,6 +7,9 @@
  - Disassembly DOL
    - Guess/Calculate common sections name
    - Divide each section into his own file
+   - Divide the bss section appropriately (`.bss`, `.sbss` and `.sbss2`)
+   - Partial Data Type Detection for Data Section (No `.incbin`)
+   - Linker Script (With appropiate section aligment)
 
 # Usage
 
