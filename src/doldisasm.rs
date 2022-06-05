@@ -52,10 +52,12 @@ impl DolCmd {
         std::fs::create_dir_all(&include_path)?;
 
         {
+            println!("\nWriting Macro File");
             let mut macro_file = create_file(&include_path.join("macros.s"))?;
             write_macro_file(&mut macro_file, &dol_file, &section_name_map, &analysis_data)?;
         }
 
+        println!("\nWriting Sections Files");
         for (si, section) in dol_file.header.sections.iter().enumerate() {
             let section_name = section_name_map.get(&si).unwrap();
             let section_file_name = format!("{}.s", section_name.replace(".", ""));
