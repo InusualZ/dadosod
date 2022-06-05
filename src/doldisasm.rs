@@ -51,10 +51,8 @@ impl DolCmd {
 
         let include_path = dol_parent_path.join("include");
         std::fs::create_dir_all(&include_path)?;
-
-        let macro_file_path = include_path.join("macros.inc");
         {
-            let mut macro_file = create_file(&macro_file_path)?;
+            let mut macro_file = create_file(&include_path.join("macros.s"))?;
             self.write_macro_file(&mut macro_file, &dol_file, &section_name_map, &analysis_data)?;
         }
 
@@ -73,7 +71,7 @@ impl DolCmd {
                 DolSectionType::Bss => "\"\", @nobits".into(),
             };
 
-            writeln!(section_file, ".include \"macros.inc\"\n")?;
+            writeln!(section_file, ".include \"macros.s\"\n")?;
             writeln!(section_file, ".section {}, {}  # 0x{:08X} - 0x{:08X} ; 0x{:08X}\n", section_name, section_type, start, end, size as u32)?;
 
             let section_data = dol_file.section_data(section);
