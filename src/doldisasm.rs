@@ -89,6 +89,8 @@ impl DolCmd {
             write_linker_script_file(&mut linker_script_file, &dol_file, &section_name_map)?;
         }
 
+        println!("Finished");
+
         Ok(())
     }
 
