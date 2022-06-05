@@ -51,9 +51,10 @@ impl DolCmd {
 
         let include_path = dol_parent_path.join("include");
         std::fs::create_dir_all(&include_path)?;
+
         {
             let mut macro_file = create_file(&include_path.join("macros.s"))?;
-            self.write_macro_file(&mut macro_file, &dol_file, &section_name_map, &analysis_data)?;
+            write_macro_file(&mut macro_file, &dol_file, &section_name_map, &analysis_data)?;
         }
 
         for (si, section) in dol_file.header.sections.iter().enumerate() {
@@ -92,7 +93,9 @@ impl DolCmd {
         Ok(())
     }
 
-    fn write_macro_file<W>(&self, dst: &mut W, dol_file: &Dol, section_name_map: &BTreeMap<usize, String>, analysis_data: &Analyser) -> Result<(), Box<dyn std::error::Error>>
+}
+
+fn write_macro_file<W>(dst: &mut W, dol_file: &Dol, section_name_map: &BTreeMap<usize, String>, analysis_data: &Analyser) -> Result<(), Box<dyn std::error::Error>>
     where
         W: Write,
     {
@@ -136,8 +139,6 @@ impl DolCmd {
 
         Ok(())
     }
-
-}
 
 fn write_linker_script_file<W>(dst: &mut W, dol_file: &Dol, section_name_map: &BTreeMap<usize, String>) -> Result<(), Box<dyn std::error::Error>>
     where
