@@ -358,7 +358,7 @@ impl Analyser {
         }
     }
 
-    pub fn write_data_section<W>(&self, dst: &mut W, data: &[u8], data_address: u32, file_offset: u32, dol_name: &String) -> Result<(), Box<dyn std::error::Error>>
+    pub fn write_data_section<W>(&self, dst: &mut W, data: &[u8], data_address: u32, file_offset: u32) -> Result<(), Box<dyn std::error::Error>>
     where
         W: IoWrite, 
     {
@@ -375,7 +375,7 @@ impl Analyser {
             let size = if let Some(&nearest_label) = section_labels.get(section_label_index) {
                 if label_address == nearest_label {
                     // The address have a label
-                    writeln!(dst, ".global {0}\n{0}:", self.get_label_for(label_address))?;
+                    writeln!(dst, "\n.global {0}\n{0}:", self.get_label_for(label_address))?;
                     
                     // Find the next nearest label so we we can, calculate the size
                     section_label_index += 1;
@@ -398,7 +398,64 @@ impl Analyser {
 
             assert!(label_address + size <= data_address_end);
 
-            writeln!(dst, "\t.incbin \"{}\", {:#X}, {:#X}", dol_name, label_file_offset, size)?;
+            writeln!(dst, "\n\t# ROM: {:#X}", label_file_offset)?;
+
+            if size == 1 {
+                writeln!(dst, "\t.byte 0x{:02X}", data[offset as usize])?;
+            } else if size == 2 {
+                writeln!(dst, "\t.short {}", read_u16(data, offset as usize))?;
+            } else { // size > 2
+                let block_size = size as usize;
+                let mut block_pos =  0usize;
+                let block_data = &data[offset as usize..(offset + size) as usize];
+                let mut pad = Vec::<u8>::with_capacity(3 /* alignment - 1 */);
+                while block_pos < block_size {
+                    while !is_aligned(data_address + offset + (block_pos as u32)) && block_pos < block_size {
+                        pad.push(block_data[block_pos]);
+                        block_pos += 1;
+                    }
+
+                    if pad.len() > 0 {
+                        if pad.iter().all(|&v| v == 0x0u8) {
+                            writeln!(dst, "\t.balign 4")?;
+                        } else {
+                            writeln!(dst, "\t.byte {}", hex_string(&pad).unwrap())?;
+                        }
+
+                        pad.clear();
+                        continue;
+                    }
+
+                    assert!(is_aligned(data_address + offset + (block_pos as u32)));
+
+                    let strv = read_c_string(block_data, block_pos);
+                    if strv.len() > 3 {
+                        block_pos += strv.len() + 1;
+                        writeln!(dst, "\t.asciz \"{}\"", escape_string(strv))?;
+                        continue;
+                    }
+
+                    if block_pos + 4 <= block_size {
+                        let word = read_u32(block_data, block_pos);
+                        block_pos += 4;
+
+                        if is_pointer(word) {
+                            writeln!(dst, "\t.4byte 0x{:08X} ; # ptr", word)?;
+                        } else if word == 0 {
+                            writeln!(dst, "\t.4byte 0")?;
+                        } else {
+                            writeln!(dst, "\t.4byte 0x{:08X}", word)?;
+                        }
+                    } else {
+                        let end_slice = &block_data[block_pos..block_size];
+                        if end_slice.len() > 0 {
+                            writeln!(dst, "\t.byte {}", hex_string(end_slice).unwrap())?;
+                            block_pos += end_slice.len();
+                            assert_eq!(block_pos, block_size);
+                        }
+                    }
+                }
+            }
 
             offset += size;
         }
@@ -406,7 +463,7 @@ impl Analyser {
         assert_eq!(offset, data.len() as u32);
         Ok(())
     }
-    
+
     pub fn write_bss_section<W>(&self, dst: &mut W, section_size: u32, data_address: u32) -> Result<(), Box<dyn std::error::Error>>
     where
         W: IoWrite, 
@@ -455,6 +512,93 @@ impl Analyser {
         Ok(())
     }
 
+}
+
+#[inline]
+fn read_u32(data: &[u8], pos: usize) -> u32 {
+    return ((data[pos + 0] as u32) << 24) | 
+           ((data[pos + 1] as u32) << 16) | 
+           ((data[pos + 2] as u32) <<  8) | 
+           ((data[pos + 3] as u32) <<  0);
+}
+
+#[inline]
+fn read_u16(data: &[u8], pos: usize) -> u16 {
+    return ((data[pos + 0] as u16) <<  8) | 
+           ((data[pos + 1] as u16) <<  0);
+}
+
+fn is_ascii(code: u8) -> bool {
+    if code >= 0x20u8 && code <= 0x7Eu8 {
+        return true;
+    }
+
+    // Tab, Newline
+    if code == 0x09 || code == 0x0A {
+        return true;
+    }
+
+    return false;
+}
+
+fn read_c_string(data: &[u8], mut pos: usize) -> String {
+    let mut retval = String::with_capacity(3);
+
+    while pos < data.len() {
+        let c = data[pos];
+        if !is_ascii(c) {
+            break;
+        }
+
+        retval.push(c as char);
+        pos += 1;
+    }
+
+    return if pos < data.len() && data[pos] == 0x0u8 {
+        retval
+    } else {
+        String::default()
+    };
+}
+
+#[inline]
+fn is_aligned(addr: u32) -> bool {
+    addr % 4 == 0
+}
+
+#[inline]
+fn is_pointer(addr: u32) -> bool {
+    addr >= 0x80003100 && addr <= 0x802F6C80
+}
+
+fn hex_string(data: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    let mut retval = String::with_capacity(data.len() * 5);
+
+    for pos in 0..data.len() {
+        if pos > 0 {
+            write!(retval, ", 0x{:02X}", data[pos])?;
+        } else {
+            write!(retval, "0x{:02X}", data[pos])?;
+        }
+    }
+
+    Ok(retval)
+}
+
+fn escape_string(value: String) -> String {
+    let mut retval = String::with_capacity(value.len());
+
+    for c in value.chars() {
+        match c {
+            '\\' => retval.push_str("\\\\"),
+            '"'  => retval.push_str("\\\""),
+            '\n' => retval.push_str("\\n"),
+            '\t' => retval.push_str("\\t"),
+            _  => retval.push(c)
+        }
+    }
+
+    retval
 }
 
 pub fn is_addr_in_section(dol: &Dol, addr: u32) -> bool {

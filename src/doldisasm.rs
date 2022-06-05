@@ -43,7 +43,6 @@ impl DolCmd {
         }
 
         let dol_full_path = std::fs::canonicalize(&self.dol_file_path)?;
-        let dol_file_name = dol_full_path.file_name().unwrap().to_string_lossy().to_string();
         let dol_parent_path = dol_full_path.parent().unwrap();
 
         let asm_path = dol_parent_path.join("asm");
@@ -79,7 +78,7 @@ impl DolCmd {
 
             match section.kind {
                 DolSectionType::Text => analysis_data.write_text_section(&mut section_file, &section_data, start, section.offset)?,
-                DolSectionType::Data => analysis_data.write_data_section(&mut section_file, &section_data, start, section.offset, &dol_file_name)?,
+                DolSectionType::Data => analysis_data.write_data_section(&mut section_file, &section_data, start, section.offset)?,
                 DolSectionType::Bss => analysis_data.write_bss_section(&mut section_file, size, start)?,
             }
         }
