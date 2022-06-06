@@ -9,14 +9,14 @@
    - Divide each section into his own file
    - Divide the bss section appropriately (`.bss`, `.sbss` and `.sbss2`)
    - Partial Data Type Detection for Data Section (No `.incbin`)
-   - Linker Script (With appropiate section aligment)
+   - Linker Script (With appropriate section alignment)
 
 # Usage
 
 ### Command Line Options
 |Command|Description|
 |-|-|
-|`dadosod dol`|[Dissassembly a dol excecutable](#dols-command-options)|
+|`dadosod dol`|[Disassembly a dol executable](#dols-command-options)|
 
 ### Dol's command options
 |Command|Description||
@@ -37,4 +37,4 @@
 - [camthesaxman](https://github.com/camthesaxman) - Author of the original `doldisasm.py` script
 
 ### From where the name comes
-`dadosod` is `disassembly` in Gales
+`dadosod` is `disassembly` in Gaelic
