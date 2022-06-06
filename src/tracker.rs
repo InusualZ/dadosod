@@ -383,15 +383,6 @@ impl GPRTracker {
         }
     }
 
-    #[inline]
-    fn get_labels_for(&self, start: u32, end: u32) -> Vec<u32> {
-        self.labels
-            .iter()
-            .filter(|&&l| l >= start && l < end)
-            .cloned()
-            .collect()
-    }
-
     pub fn write_data_section<W>(
         &self,
         dst: &mut W,
@@ -405,42 +396,23 @@ impl GPRTracker {
     {
         let data_address_end = data_address + data.len() as u32;
 
-        let mut section_label_index = 0usize;
-        let section_labels = self.get_labels_for(data_address, data_address_end);
+        let mut section_labels = SectionLabels::from(data_address, data_address_end, &self.labels);
 
         let mut offset = 0u32;
         while (offset as usize) < data.len() {
             let label_file_offset = file_offset + offset;
 
             let label_address = offset + data_address;
-            let size = if let Some(&nearest_label) = section_labels.get(section_label_index) {
-                if label_address == nearest_label {
-                    // The address have a label
-                    writeln!(
-                        dst,
-                        "\n.global {0}\n{0}:",
-                        self.get_label_for(label_address)
-                    )?;
+            if self.labels.contains(&label_address) {
+                // The address have a label
+                writeln!(
+                    dst,
+                    "\n.global {0}\n{0}:",
+                    self.get_label_for(label_address)
+                )?;
+            }
 
-                    // Find the next nearest label so we we can, calculate the size
-                    section_label_index += 1;
-
-                    if let Some(&next_nearest_label) = section_labels.get(section_label_index) {
-                        assert!(next_nearest_label > label_address);
-                        // Gap between labels
-                        next_nearest_label - label_address
-                    } else {
-                        // Gap between the label and the end of the section
-                        data_address_end - label_address
-                    }
-                } else {
-                    // The address did not had a label, calculate the gap between labels
-                    nearest_label - label_address
-                }
-            } else {
-                (data.len() as u32) - offset
-            };
-
+            let size = section_labels.get_label_size(label_address);
             assert!(label_address + size <= data_address_end);
 
             writeln!(dst, "\n\t# ROM: {:#X}", label_file_offset)?;
@@ -522,41 +494,24 @@ impl GPRTracker {
         W: IoWrite,
     {
         let data_address_end = data_address + section_size;
-
-        let mut section_label_index = 0usize;
-        let section_labels = self.get_labels_for(data_address, data_address_end);
+        let mut section_labels = SectionLabels::from(data_address, data_address_end, &self.labels);
 
         let mut offset = 0u32;
         while offset < section_size {
             let label_address = offset + data_address;
-            let size = if let Some(&nearest_label) = section_labels.get(section_label_index) {
-                if label_address == nearest_label {
-                    // The address have a label
-                    writeln!(dst, ".global {0}\n{0}:", self.get_label_for(label_address))?;
+            if self.labels.contains(&label_address) {
+                // The address have a label
+                writeln!(
+                    dst,
+                    "\n.global {0}\n{0}:",
+                    self.get_label_for(label_address)
+                )?;
+            }
 
-                    // Find the next nearest label so we we can, calculate the size
-                    section_label_index += 1;
-
-                    if let Some(&next_nearest_label) = section_labels.get(section_label_index) {
-                        assert!(next_nearest_label > label_address);
-                        // Gap between labels
-                        next_nearest_label - label_address
-                    } else {
-                        // Gap between the label and the end of the section
-                        data_address_end - label_address
-                    }
-                } else {
-                    // The address did not had a label, calculate the gap between labels
-                    nearest_label - label_address
-                }
-            } else {
-                section_size - offset
-            };
-
+            let size = section_labels.get_label_size(label_address);
             assert!(label_address + size <= data_address_end);
 
             writeln!(dst, "\t.skip {:#X}", size)?;
-
             offset += size;
         }
 
@@ -578,6 +533,53 @@ impl GPRTracker {
         return ins.op == Opcode::Ori
             && !(r_a == 0 && r_s == 0 && ins.field_uimm() == 0)
             && registers.contains_key(&r_s);
+    }
+}
+
+struct SectionLabels {
+    // Section End Address
+    section_end: u32,
+    // label address
+    labels: Vec<u32>,
+    // Keep track of the last accessed label
+    label_access_index: usize,
+}
+
+impl SectionLabels {
+    pub fn from(section_start: u32, section_end: u32, labels: &BTreeSet<u32>) -> Self {
+        Self {
+            section_end,
+            labels: labels
+                .iter()
+                .filter(|&&l| l >= section_start && l < section_end)
+                .cloned()
+                .collect(),
+            label_access_index: 0,
+        }
+    }
+
+    /// @return u32 - size of the current label
+    pub fn get_label_size(&mut self, label_address: u32) -> u32 {
+        if let Some(&nearest_label) = self.labels.get(self.label_access_index) {
+            if label_address == nearest_label {
+                // Find the next nearest label so we we can, calculate the size
+                self.label_access_index += 1;
+
+                if let Some(&next_nearest_label) = self.labels.get(self.label_access_index) {
+                    assert!(next_nearest_label > label_address);
+                    // Gap between labels
+                    next_nearest_label - label_address
+                } else {
+                    // Gap between the label and the end of the section
+                    self.section_end - label_address
+                }
+            } else {
+                // The address did not had a label, calculate the gap between labels
+                nearest_label - label_address
+            }
+        } else {
+            self.section_end - label_address
+        }
     }
 }
 
