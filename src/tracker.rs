@@ -4,6 +4,7 @@ use std::{
     io::Write as IoWrite,
 };
 
+use crate::utils::is_aligned;
 use dol::{Dol, DolSectionType};
 use ppc750cl::{self, formatter::FormattedIns, Argument, Ins, Opcode};
 
@@ -455,7 +456,7 @@ impl GPRTracker {
                 let block_data = &data[offset as usize..(offset + size) as usize];
                 let mut pad = Vec::<u8>::with_capacity(3 /* alignment - 1 */);
                 while block_pos < block_size {
-                    while !is_aligned(data_address + offset + (block_pos as u32))
+                    while !is_aligned(data_address + offset + (block_pos as u32), 4)
                         && block_pos < block_size
                     {
                         pad.push(block_data[block_pos]);
@@ -473,7 +474,7 @@ impl GPRTracker {
                         continue;
                     }
 
-                    assert!(is_aligned(data_address + offset + (block_pos as u32)));
+                    assert!(is_aligned(data_address + offset + (block_pos as u32), 4));
 
                     let strv = read_c_string(block_data, block_pos);
                     if strv.len() > 3 {
@@ -624,11 +625,6 @@ fn read_c_string(data: &[u8], mut pos: usize) -> String {
     } else {
         String::default()
     };
-}
-
-#[inline]
-fn is_aligned(addr: u32) -> bool {
-    addr % 4 == 0
 }
 
 fn hex_string(data: &[u8]) -> Result<String, Box<dyn std::error::Error>> {

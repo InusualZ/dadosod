@@ -1,5 +1,6 @@
 mod doldisasm;
 mod tracker;
+mod utils;
 
 use argh::FromArgs;
 use doldisasm::DolCmd;

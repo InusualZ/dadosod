@@ -8,6 +8,7 @@ use std::{
 };
 
 use crate::tracker::GPRTracker;
+use crate::utils::align;
 
 #[derive(Debug, PartialEq, FromArgs)]
 #[argh(subcommand, name = "dol")]
@@ -242,10 +243,6 @@ where
 
     writeln!(dst, "}}")?; // SECTIONS
     Ok(())
-}
-
-fn align(address: u32, alignment: u32) -> u32 {
-    !(alignment - 1u32) & (alignment + address) - 1
 }
 
 /// CodeWarrior/MetroWerks compiler emit a limited set of section so for
