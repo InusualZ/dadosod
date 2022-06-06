@@ -143,8 +143,23 @@ impl GPRTracker {
             let &hi_load = registers.get(&hi_load_reg).unwrap();
             let target_address = combine_split_load_value(hi_load, ins);
 
+            // Give the `lis` instruction a label for his offset
+            if let Some(entry) = lis_address.remove_entry(&hi_load_reg) {
+                if target_address >= 0x80_00_00_00 {
+                    self.ins_labels
+                        .insert(ins.addr, LabelAddress::L(target_address));
+
+                    let target_address = if is_ori {
+                        LabelAddress::H(target_address)
+                    } else {
+                        LabelAddress::HA(target_address)
+                    };
+                    self.ins_labels.insert(entry.1, target_address);
+                }
+            }
+
             if is_addr_in_section(dol_file, target_address) {
-                self.add_label(ins.addr, LabelAddress::L(target_address));
+                self.labels.insert(target_address);
 
                 if !is_label_addr_in_ins_section(dol_file, target_address, ins.addr) {
                     self.label_names.insert(
@@ -152,31 +167,12 @@ impl GPRTracker {
                         self.get_label_for(target_address.clone()),
                     );
                 }
+            }
 
-                // Give the `lis` instruction a label for his offset
-                if let Some(entry) = lis_address.remove_entry(&hi_load_reg) {
-                    let target_address = if is_ori {
-                        LabelAddress::H(target_address)
-                    } else {
-                        LabelAddress::HA(target_address)
-                    };
-                    self.add_label(entry.1, target_address);
-                }
-
-                // Set the destination register to the calculated value
-                // if is_addi {
-                //     self.set_register(ins.field_rD() as u32, target_address);
-                // } else if is_ori {
-                //     self.set_register(ins.field_rS() as u32, target_address);
-                // } else
-
-                if is_addi {
-                    registers.remove_entry(&(ins.field_rD() as u32));
-                } else if is_ori {
-                    registers.remove_entry(&(ins.field_rA() as u32));
-                }
-            } else {
-                lis_address.remove_entry(&hi_load_reg);
+            if is_addi {
+                registers.remove_entry(&(ins.field_rD() as u32));
+            } else if is_ori {
+                registers.remove_entry(&(ins.field_rA() as u32));
             }
 
             // detect r2/r13 initialization
