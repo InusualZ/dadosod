@@ -1,5 +1,5 @@
 mod doldisasm;
-mod analysis;
+mod tracker;
 
 use argh::FromArgs;
 use doldisasm::DolCmd;
@@ -8,7 +8,7 @@ use doldisasm::DolCmd;
 /// disassembly of wii/gc executable file
 struct DadosodCmd {
     #[argh(subcommand)]
-    executable: DadosodSubCmd
+    executable: DadosodSubCmd,
 }
 
 #[derive(Debug, PartialEq, FromArgs)]
