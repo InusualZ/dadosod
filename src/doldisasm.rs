@@ -46,12 +46,13 @@ impl DolCmd {
         let mut tracker = GPRTracker::new(dol_file.header.entry_point);
 
         for section in &dol_file.header.sections {
-            if section.kind != DolSectionType::Text {
-                continue;
-            }
-
             let section_data = dol_file.section_data(section);
-            tracker.analyze_text_section(&dol_file, &section_data, section.target);
+
+            if section.kind == DolSectionType::Text {
+                tracker.analyze_text_section(&dol_file, &section_data, section.target);
+            } else if section.kind == DolSectionType::Data {
+                tracker.analyze_data_section(&dol_file, &section_data, section.target);
+            }
         }
 
         let dol_full_path = std::fs::canonicalize(&self.dol_file_path)?;
@@ -103,7 +104,6 @@ impl DolCmd {
                 )?,
                 DolSectionType::Data => tracker.write_data_section(
                     &mut section_file,
-                    &dol_file,
                     &section_data,
                     start,
                     section.offset,

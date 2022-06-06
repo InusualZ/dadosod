@@ -4,7 +4,7 @@ use std::{
     io::Write as IoWrite,
 };
 
-use crate::utils::is_aligned;
+use crate::utils::{align, is_aligned};
 use dol::{Dol, DolSectionType};
 use ppc750cl::{self, formatter::FormattedIns, Argument, Ins, Opcode};
 
@@ -162,7 +162,7 @@ impl GPRTracker {
             if is_addr_in_section(dol_file, target_address) {
                 self.labels.insert(target_address);
 
-                if !is_label_addr_in_ins_section(dol_file, target_address, ins.addr) {
+                if !is_label_addr_in_src_section(dol_file, target_address, ins.addr) {
                     self.label_names.insert(
                         target_address.clone(),
                         self.get_label_for(target_address.clone()),
@@ -233,6 +233,61 @@ impl GPRTracker {
             if is_addr_in_section(dol_file, target_address) {
                 self.add_label(ins.addr, LabelAddress::SDA21(target_address));
             }
+        }
+    }
+
+    pub fn analyze_data_section(&mut self, dol_file: &Dol, data: &[u8], data_address: u32) {
+        let data_address_end = data_address + data.len() as u32;
+        let mut section_labels = SectionLabels::from(data_address, data_address_end, &self.labels);
+
+        let mut offset = 0u32;
+        while (offset as usize) < data.len() {
+            let label_address = data_address + offset;
+            let label_size = section_labels.get_label_size(label_address);
+
+            // We don't care for small label
+            if label_size < 4 {
+                offset += label_size;
+                continue;
+            }
+
+            let mut label_pos = 0u32;
+            let label_data = &data[offset as usize..(offset + label_size) as usize];
+            while label_pos < label_size {
+                let unaligned = align(data_address + offset + label_pos, 4)
+                    - (data_address + offset + label_pos);
+
+                if unaligned > 0 {
+                    label_pos += unaligned;
+                    continue;
+                }
+
+                let c_str = read_c_string(label_data, label_pos as usize);
+                if c_str.len() > 3 {
+                    label_pos += (c_str.len() as u32) + 1;
+                    continue;
+                }
+
+                if label_pos + 4 > label_size {
+                    break;
+                }
+
+                let word = read_u32(label_data, label_pos as usize);
+                if is_addr_in_section(dol_file, word) {
+                    self.labels.insert(word);
+
+                    if !is_label_addr_in_src_section(
+                        dol_file,
+                        word,
+                        data_address + offset + label_pos,
+                    ) {
+                        self.label_names.insert(word, self.get_label_for(word));
+                    }
+                }
+
+                label_pos += 4;
+            }
+            offset += label_size;
         }
     }
 
@@ -386,7 +441,6 @@ impl GPRTracker {
     pub fn write_data_section<W>(
         &self,
         dst: &mut W,
-        dol_file: &Dol,
         data: &[u8],
         data_address: u32,
         file_offset: u32,
@@ -459,12 +513,10 @@ impl GPRTracker {
                         let word = read_u32(block_data, block_pos);
                         block_pos += 4;
 
-                        if is_addr_in_section(dol_file, word) {
-                            writeln!(dst, "\t.4byte 0x{:08X} ; # ptr", word)?;
-                        } else if word == 0 {
+                        if word == 0 {
                             writeln!(dst, "\t.4byte 0")?;
                         } else {
-                            writeln!(dst, "\t.4byte 0x{:08X}", word)?;
+                            writeln!(dst, "\t.4byte {}", self.get_label_for(word))?;
                         }
                     } else {
                         let end_slice = &block_data[block_pos..block_size];
@@ -698,7 +750,7 @@ pub fn combine_split_load_value(mut hi_addr: u32, lo_load: &Ins) -> u32 {
 }
 
 // Check if label address belong to the same section than the instruction
-pub fn is_label_addr_in_ins_section(dol: &Dol, label_addr: u32, ins_addr: u32) -> bool {
+pub fn is_label_addr_in_src_section(dol: &Dol, label_addr: u32, src_addr: u32) -> bool {
     for section in &dol.header.sections {
         let start = section.target;
         let size = section.size;
@@ -708,7 +760,7 @@ pub fn is_label_addr_in_ins_section(dol: &Dol, label_addr: u32, ins_addr: u32) -
 
         let end = start + size;
         if label_addr >= start && label_addr < end {
-            return ins_addr >= start && ins_addr < end;
+            return src_addr >= start && src_addr < end;
         }
     }
 
