@@ -102,6 +102,7 @@ impl DolCmd {
                 )?,
                 DolSectionType::Data => tracker.write_data_section(
                     &mut section_file,
+                    &dol_file,
                     &section_data,
                     start,
                     section.offset,

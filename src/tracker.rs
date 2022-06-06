@@ -394,6 +394,7 @@ impl GPRTracker {
     pub fn write_data_section<W>(
         &self,
         dst: &mut W,
+        dol_file: &Dol,
         data: &[u8],
         data_address: u32,
         file_offset: u32,
@@ -485,7 +486,7 @@ impl GPRTracker {
                         let word = read_u32(block_data, block_pos);
                         block_pos += 4;
 
-                        if is_pointer(word) {
+                        if is_addr_in_section(dol_file, word) {
                             writeln!(dst, "\t.4byte 0x{:08X} ; # ptr", word)?;
                         } else if word == 0 {
                             writeln!(dst, "\t.4byte 0")?;
@@ -628,11 +629,6 @@ fn read_c_string(data: &[u8], mut pos: usize) -> String {
 #[inline]
 fn is_aligned(addr: u32) -> bool {
     addr % 4 == 0
-}
-
-#[inline]
-fn is_pointer(addr: u32) -> bool {
-    addr >= 0x80003100 && addr <= 0x802F6C80
 }
 
 fn hex_string(data: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
