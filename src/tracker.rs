@@ -466,52 +466,46 @@ impl GPRTracker {
                 )?;
             }
 
-            let size = section_labels.get_label_size(label_address);
-            assert!(label_address + size <= data_address_end);
+            let label_size = section_labels.get_label_size(label_address);
+            assert!(label_address + label_size <= data_address_end);
 
             writeln!(dst, "\n\t# ROM: {:#X}", label_file_offset)?;
 
-            if size == 1 {
+            if label_size == 1 {
                 writeln!(dst, "\t.byte 0x{:02X}", data[offset as usize])?;
-            } else if size == 2 {
-                writeln!(dst, "\t.short {}", read_u16(data, offset as usize))?;
+            } else if label_size == 2 {
+                writeln!(dst, "\t.2byte 0x{:04X}", read_u16(data, offset as usize))?;
             } else {
                 // size > 2
-                let block_size = size as usize;
-                let mut block_pos = 0usize;
-                let block_data = &data[offset as usize..(offset + size) as usize];
-                let mut pad = Vec::<u8>::with_capacity(3 /* alignment - 1 */);
-                while block_pos < block_size {
-                    while !is_aligned(data_address + offset + (block_pos as u32), 4)
-                        && block_pos < block_size
-                    {
-                        pad.push(block_data[block_pos]);
-                        block_pos += 1;
-                    }
+                let mut label_pos = 0u32;
+                let label_data = &data[offset as usize..(offset + label_size) as usize];
+                while label_pos < label_size {
+                    let section_off = label_address + label_pos;
+                    let diff = align(section_off, 4) - section_off;
+                    if diff > 0 {
+                        let pad_end = std::cmp::min(label_pos + diff, label_size);
+                        let pad = &label_data[label_pos as usize..pad_end as usize];
 
-                    if pad.len() > 0 {
-                        if pad.iter().all(|&v| v == 0x0u8) {
+                        if pad.len() as u32 == diff && pad.iter().all(|&v| v == 0x0u8) {
                             writeln!(dst, "\t.balign 4")?;
                         } else {
-                            writeln!(dst, "\t.byte {}", hex_string(&pad).unwrap())?;
+                            writeln!(dst, "\t.byte {}", hex_string(pad).unwrap())?;
                         }
 
-                        pad.clear();
+                        label_pos += pad.len() as u32;
                         continue;
                     }
 
-                    assert!(is_aligned(data_address + offset + (block_pos as u32), 4));
-
-                    let strv = read_c_string(block_data, block_pos);
+                    let strv = read_c_string(label_data, label_pos as usize);
                     if strv.len() > 3 {
-                        block_pos += strv.len() + 1;
+                        label_pos += (strv.len() as u32) + 1;
                         writeln!(dst, "\t.asciz \"{}\"", escape_string(strv))?;
                         continue;
                     }
 
-                    if block_pos + 4 <= block_size {
-                        let word = read_u32(block_data, block_pos);
-                        block_pos += 4;
+                    if label_pos + 4 <= label_size {
+                        let word = read_u32(label_data, label_pos as usize);
+                        label_pos += 4;
 
                         if word == 0 {
                             writeln!(dst, "\t.4byte 0")?;
@@ -519,17 +513,17 @@ impl GPRTracker {
                             writeln!(dst, "\t.4byte {}", self.get_label_for(word))?;
                         }
                     } else {
-                        let end_slice = &block_data[block_pos..block_size];
+                        let end_slice = &label_data[label_pos as usize..];
                         if end_slice.len() > 0 {
                             writeln!(dst, "\t.byte {}", hex_string(end_slice).unwrap())?;
-                            block_pos += end_slice.len();
-                            assert_eq!(block_pos, block_size);
+                            label_pos += end_slice.len() as u32;
+                            assert_eq!(label_pos, label_size);
                         }
                     }
                 }
             }
 
-            offset += size;
+            offset += label_size;
         }
 
         assert_eq!(offset, data.len() as u32);
