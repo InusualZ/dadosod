@@ -48,7 +48,7 @@ dependencies = [
 
 [[package]]
 name = "dadosod"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "argh",
  "dol",

@@ -1,9 +1,11 @@
 [package]
 name = "dadosod"
-version = "0.0.1"
+description = "Facilitate the process of creating a decompilation project for a given Wii/Gamecube game"
+authors = ["Wesley Moret <wesmoret98@gmail.com>"]
+version = "1.0.0"
+license="GPL-3.0-or-later"
+keywords = ["wii", "gamecube", "decompilation", "disassembly"]
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 
