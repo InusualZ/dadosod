@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 
-ppc750cl = { git='https://github.com/InusualZ/ppc750cl', branch="dol-improv", package='ppc750cl' }
-dol = { git='https://github.com/InusualZ/ppc750cl', branch="dol-improv", package='dol' }
+ppc750cl = { git='https://github.com/terorie/ppc750cl', package='ppc750cl' }
+dol = { git='https://github.com/terorie/ppc750cl', package='dol' }
 
 argh = "0.1"
