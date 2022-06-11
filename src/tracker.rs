@@ -99,10 +99,6 @@ impl GPRTracker {
         if matches!(ins.op, Opcode::B | Opcode::Bc) {
             let branch_dest = ins.branch_dest().unwrap();
 
-            // TODO: We should not do this for conditional branch, since the target may belong to the same function
-            registers.clear();
-            lis_address.clear();
-
             if is_addr_in_section(dol_file, branch_dest.clone()) {
                 // Since at least is a branch into a known section treat it as a label
                 self.add_label(ins.addr, LabelAddress::BRANCH(branch_dest));
