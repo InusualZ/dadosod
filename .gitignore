@@ -7,3 +7,5 @@
 *.dol
 *.rel
 *.rso
+
+*.exe
