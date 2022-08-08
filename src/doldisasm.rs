@@ -342,20 +342,18 @@ fn calculate_section_names(dol_file: &mut Dol) -> BTreeMap<usize, String> {
         // Calculate sbss2 size
         if bss_section_rom_end > sdata2_rom_end {
             let sbss2_size = bss_section_rom_end - sdata2_rom_end;
-            if sbss2_size > 0 {
-                // Insert `.sbss2` section name
-                names_map.insert(sdata2_section_index + 1, ".sbss2".into());
+            // Insert `.sbss2` section name
+            names_map.insert(sdata2_section_index + 1, ".sbss2".into());
 
-                // Insert newly discover section
-                let sbss2_target = bss_section_rom_end - sbss2_size;
-                sections.push(DolSection {
-                    kind: DolSectionType::Bss,
-                    index: 0,
-                    offset: 0,
-                    target: sbss2_target,
-                    size: sbss2_size,
-                });
-            }
+            // Insert newly discover section
+            let sbss2_target = bss_section_rom_end - sbss2_size;
+            sections.push(DolSection {
+                kind: DolSectionType::Bss,
+                index: 0,
+                offset: 0,
+                target: sbss2_target,
+                size: sbss2_size,
+            });
         }
     } else {
         println!(
