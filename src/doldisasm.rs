@@ -314,8 +314,9 @@ fn calculate_section_names(dol_file: &mut Dol) -> BTreeMap<usize, String> {
 
         // Calculate sbss section
         let sdata_rom_end = sdata_section.target + sdata_section.size;
-        let sbss_size = sdata2_section.target - sdata_rom_end;
-        if sbss_size > 0 {
+        if sdata2_section.target > sdata_rom_end {
+            let sbss_size = sdata2_section.target - sdata_rom_end;
+
             // Insert .sbss section name
             names_map.insert(sdata2_section_index, ".sbss".into());
 
