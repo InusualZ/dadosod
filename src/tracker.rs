@@ -4,7 +4,8 @@ use std::{
     io::Write as IoWrite,
 };
 
-use crate::utils::{align, is_aligned};
+use crate::symbol::Symbol;
+use crate::utils::{align};
 use dol::{Dol, DolSectionType};
 use ppc750cl::{self, formatter::FormattedIns, Argument, Ins, Opcode};
 
@@ -42,7 +43,7 @@ impl LabelAddress {
 
 // General Purpose Register Tracker
 #[derive(Debug)]
-pub struct GPRTracker {
+pub struct GPRTracker<'a> {
     pub r2_addr: u32,
     pub r13_addr: u32,
 
@@ -53,21 +54,22 @@ pub struct GPRTracker {
     pub labels: BTreeSet<u32>,
 
     // section's block name
-    pub label_names: BTreeMap<u32, String>,
+    pub label_names: &'a mut BTreeMap<u32, Symbol>,
+
+    // attempt to detect function
+    detect_functions: bool,
 }
 
-impl GPRTracker {
-    pub fn new(entry_point: u32) -> Self {
-        let mut data = Self {
+impl<'a> GPRTracker<'a> {
+    pub fn new(symbols: &'a mut BTreeMap<u32, Symbol>, detect_functions: bool) -> Self {
+        let data = Self {
             r2_addr: 0,
             r13_addr: 0,
             ins_labels: Default::default(),
             labels: Default::default(),
-            label_names: Default::default(),
+            detect_functions,
+            label_names: symbols,
         };
-
-        data.labels.insert(entry_point);
-        data.label_names.insert(entry_point, "__start".into());
 
         data
     }
@@ -104,9 +106,9 @@ impl GPRTracker {
                 self.add_label(ins.addr, LabelAddress::BRANCH(branch_dest));
 
                 // if is not a conditional branch, treat it as a function
-                if ins.op == Opcode::B || ins.field_BO() == 20 {
+                if self.detect_functions && (ins.op == Opcode::B || ins.field_BO() == 20) {
                     self.label_names
-                        .insert(branch_dest, format!("func_{:08X}", branch_dest));
+                        .insert(branch_dest, Symbol::with_name(format!("func_{:08X}", branch_dest)));
                 }
             }
         } else if ins.op == Opcode::Addis && ins.field_rA() == 0 {
@@ -158,10 +160,11 @@ impl GPRTracker {
             if is_addr_in_section(dol_file, target_address) {
                 self.labels.insert(target_address);
 
-                if !is_label_addr_in_src_section(dol_file, target_address, ins.addr) {
+                if !self.label_names.contains_key(&target_address) && 
+                    !is_label_addr_in_src_section(dol_file, target_address, ins.addr) {
                     self.label_names.insert(
                         target_address.clone(),
-                        self.get_label_for(target_address.clone()),
+                        Symbol::with_name(self.get_label_for(target_address.clone())),
                     );
                 }
             }
@@ -272,12 +275,12 @@ impl GPRTracker {
                 if is_addr_in_section(dol_file, word) {
                     self.labels.insert(word);
 
-                    if !is_label_addr_in_src_section(
+                    if !self.label_names.contains_key(&word) && !is_label_addr_in_src_section(
                         dol_file,
                         word,
                         data_address + offset + label_pos,
                     ) {
-                        self.label_names.insert(word, self.get_label_for(word));
+                        self.label_names.insert(word, Symbol::with_name(self.get_label_for(word)));
                     }
                 }
 
@@ -425,7 +428,7 @@ impl GPRTracker {
     fn get_label_for(&self, addr: u32) -> String {
         if self.labels.contains(&addr) {
             if let Some(lbl) = self.label_names.get(&addr) {
-                lbl.clone()
+                lbl.name.clone()
             } else {
                 format!("lbl_{:08X}", addr)
             }

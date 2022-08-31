@@ -7,6 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::symbol::Symbol;
 use crate::tracker::GPRTracker;
 use crate::utils::align;
 
@@ -17,6 +18,14 @@ pub struct DolCmd {
     /// path of the `.dol` Wii/GC executable file
     #[argh(positional)]
     dol_file_path: PathBuf,
+
+    /// path of the map file
+    #[argh(option, short='m')]
+    map_file_path: Option<PathBuf>,
+
+    /// detect function by calls (unreliable)
+    #[argh(option)]
+    detect_functions: bool,
 }
 
 impl DolCmd {
@@ -27,6 +36,18 @@ impl DolCmd {
         // Try giving each section a name
         let section_name_map = calculate_section_names(&mut dol_file);
         assert_eq!(section_name_map.len(), dol_file.header.sections.len());
+
+        let mut symbols_map = if let Some(map_file_path) = &self.map_file_path {
+            let map_file = File::open(&map_file_path)?;
+            println!("Reading Symbols .. ");
+            let map = Symbol::from_csv(map_file)?;
+            println!("{}", map.len());
+            map
+        } else {
+            let mut map = BTreeMap::default();
+            map.insert(dol_file.header.entry_point, Symbol::with_name("__start".into()));
+            map
+        };
 
         println!("Sections:");
         for (si, section) in dol_file.header.sections.iter().enumerate() {
@@ -43,7 +64,7 @@ impl DolCmd {
         }
 
         // Analyse sections
-        let mut tracker = GPRTracker::new(dol_file.header.entry_point);
+        let mut tracker = GPRTracker::new(&mut symbols_map, self.detect_functions);
 
         for section in &dol_file.header.sections {
             let section_data = dol_file.section_data(section);
