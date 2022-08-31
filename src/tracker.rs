@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::symbol::Symbol;
-use crate::utils::{align};
+use crate::utils::align;
 use dol::{Dol, DolSectionType};
 use ppc750cl::{self, formatter::FormattedIns, Argument, Ins, Opcode};
 
@@ -107,8 +107,10 @@ impl<'a> GPRTracker<'a> {
 
                 // if is not a conditional branch, treat it as a function
                 if self.detect_functions && (ins.op == Opcode::B || ins.field_BO() == 20) {
-                    self.label_names
-                        .insert(branch_dest, Symbol::with_name(format!("func_{:08X}", branch_dest)));
+                    self.label_names.insert(
+                        branch_dest,
+                        Symbol::with_name(format!("func_{:08X}", branch_dest)),
+                    );
                 }
             }
         } else if ins.op == Opcode::Addis && ins.field_rA() == 0 {
@@ -160,8 +162,9 @@ impl<'a> GPRTracker<'a> {
             if is_addr_in_section(dol_file, target_address) {
                 self.labels.insert(target_address);
 
-                if !self.label_names.contains_key(&target_address) && 
-                    !is_label_addr_in_src_section(dol_file, target_address, ins.addr) {
+                if !self.label_names.contains_key(&target_address)
+                    && !is_label_addr_in_src_section(dol_file, target_address, ins.addr)
+                {
                     self.label_names.insert(
                         target_address.clone(),
                         Symbol::with_name(self.get_label_for(target_address.clone())),
@@ -275,12 +278,15 @@ impl<'a> GPRTracker<'a> {
                 if is_addr_in_section(dol_file, word) {
                     self.labels.insert(word);
 
-                    if !self.label_names.contains_key(&word) && !is_label_addr_in_src_section(
-                        dol_file,
-                        word,
-                        data_address + offset + label_pos,
-                    ) {
-                        self.label_names.insert(word, Symbol::with_name(self.get_label_for(word)));
+                    if !self.label_names.contains_key(&word)
+                        && !is_label_addr_in_src_section(
+                            dol_file,
+                            word,
+                            data_address + offset + label_pos,
+                        )
+                    {
+                        self.label_names
+                            .insert(word, Symbol::with_name(self.get_label_for(word)));
                     }
                 }
 
@@ -296,11 +302,42 @@ impl<'a> GPRTracker<'a> {
         code: &[u8],
         code_address: u32,
         file_offset: u32,
+        remove_symbols_code: bool,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
         W: IoWrite,
     {
+        let code_symbols = if remove_symbols_code {
+            self.label_names
+                .values()
+                .filter(|s| {
+                    s.size > 0
+                        && s.virtual_address >= code_address
+                        && s.virtual_address + s.size < code_address + code.len() as u32
+                })
+                .collect()
+        } else {
+            Vec::default()
+        };
+
+        let get_symbol = |addr: u32| {
+            code_symbols
+                .iter()
+                .find(|s| addr >= s.virtual_address && addr < s.virtual_address + s.size)
+        };
+
+        let mut skip_count = 0u32;
         for ins in ppc750cl::disasm_iter(code, code_address) {
+            if skip_count > 0 {
+                skip_count -= 1;
+                continue;
+            }
+
+            if let Some(code_symbol) = get_symbol(ins.addr) {
+                skip_count = (code_symbol.size / 4) - 1;
+                continue;
+            }
+
             let ins_addr = ins.addr;
             let ins_offset = ins_addr - code_address;
             let ins_bytes = vec![
@@ -443,6 +480,7 @@ impl<'a> GPRTracker<'a> {
         data: &[u8],
         data_address: u32,
         file_offset: u32,
+        remove_symbols_data: bool,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
         W: IoWrite,
@@ -451,11 +489,47 @@ impl<'a> GPRTracker<'a> {
 
         let mut section_labels = SectionLabels::from(data_address, data_address_end, &self.labels);
 
+        let data_symbols = if remove_symbols_data {
+            self.label_names
+                .values()
+                .filter(|s| {
+                    s.size > 0
+                        && s.virtual_address >= data_address
+                        && s.virtual_address + s.size < data_address_end
+                })
+                .collect()
+        } else {
+            Vec::default()
+        };
+
+        let get_symbol = |addr: u32| {
+            data_symbols
+                .iter()
+                .find(|s| addr >= s.virtual_address && addr < s.virtual_address + s.size)
+        };
+
         let mut offset = 0u32;
         while (offset as usize) < data.len() {
             let label_file_offset = file_offset + offset;
-
             let label_address = offset + data_address;
+
+            if let Some(code_symbol) = get_symbol(label_address) {
+                offset += code_symbol.size;
+
+                if let Some(next_label_pos) = section_labels
+                    .labels
+                    .iter()
+                    .skip(section_labels.label_access_index)
+                    .position(|l| *l >= (offset + data_address))
+                {
+                    section_labels.label_access_index += next_label_pos;
+                } else {
+                    section_labels.label_access_index = section_labels.labels.len()
+                }
+
+                continue;
+            }
+
             if self.labels.contains(&label_address) {
                 // The address have a label
                 writeln!(
@@ -607,7 +681,7 @@ impl SectionLabels {
     pub fn get_label_size(&mut self, label_address: u32) -> u32 {
         if let Some(&nearest_label) = self.labels.get(self.label_access_index) {
             if label_address == nearest_label {
-                // Find the next nearest label so we we can, calculate the size
+                // Find the next nearest label so we can, calculate the size
                 self.label_access_index += 1;
 
                 if let Some(&next_nearest_label) = self.labels.get(self.label_access_index) {

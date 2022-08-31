@@ -1,5 +1,6 @@
 use argh::FromArgs;
 use dol::{Dol, DolSection, DolSectionType};
+use std::collections::HashMap;
 use std::io::Write;
 use std::{
     collections::BTreeMap,
@@ -9,7 +10,7 @@ use std::{
 
 use crate::symbol::Symbol;
 use crate::tracker::GPRTracker;
-use crate::utils::align;
+use crate::utils::{align, get_section_flags};
 
 #[derive(Debug, PartialEq, FromArgs)]
 #[argh(subcommand, name = "dol")]
@@ -20,11 +21,15 @@ pub struct DolCmd {
     dol_file_path: PathBuf,
 
     /// path of the map file
-    #[argh(option, short='m')]
+    #[argh(option, short = 'm')]
     map_file_path: Option<PathBuf>,
 
+    /// write symbols in their translation unit, if specified
+    #[argh(option, default = "true")]
+    write_translation_unit: bool,
+
     /// detect function by calls (unreliable)
-    #[argh(option)]
+    #[argh(option, default = "false")]
     detect_functions: bool,
 }
 
@@ -39,13 +44,16 @@ impl DolCmd {
 
         let mut symbols_map = if let Some(map_file_path) = &self.map_file_path {
             let map_file = File::open(&map_file_path)?;
-            println!("Reading Symbols .. ");
+            print!("Reading Symbols .. ");
             let map = Symbol::from_csv(map_file)?;
             println!("{}", map.len());
             map
         } else {
             let mut map = BTreeMap::default();
-            map.insert(dol_file.header.entry_point, Symbol::with_name("__start".into()));
+            map.insert(
+                dol_file.header.entry_point,
+                Symbol::with_name("__start".into()),
+            );
             map
         };
 
@@ -91,9 +99,89 @@ impl DolCmd {
             write_macro_file(&mut macro_file, &dol_file, &section_name_map, &tracker)?;
         }
 
+        let grouped_symbols = if self.write_translation_unit {
+            tracker.label_names.values().fold(
+                HashMap::new(),
+                |mut init: HashMap<String, Vec<&Symbol>>, ref item| {
+                    if let Some(translation_unit) = &item.translation_unit {
+                        if !translation_unit.is_empty() && item.size > 0 {
+                            if let Some(entry) = init.get_mut(translation_unit) {
+                                entry.push(item);
+                            } else {
+                                init.insert(translation_unit.clone(), vec![*item]);
+                            }
+                        }
+                    }
+                    init
+                },
+            )
+        } else {
+            HashMap::new()
+        };
+
+        let remove_symbols_data = self.write_translation_unit && grouped_symbols.len() > 0;
+
+        if grouped_symbols.len() > 0 {
+            println!("\nWriting Translation Units");
+            for (translation_unit, symbols) in grouped_symbols {
+                let mut full_tu_path = dol_parent_path.join(&translation_unit);
+                full_tu_path.set_extension("s");
+
+                std::fs::create_dir_all(full_tu_path.parent().unwrap())?;
+                let mut tu_file = create_file(&full_tu_path)?;
+
+                println!(" - {}", translation_unit);
+                writeln!(tu_file, ".include \"macros.s\"\n")?;
+
+                let mut last_section_kind = DolSectionType::Bss;
+                for symbol in symbols {
+                    let section = dol_file.header.section_at(symbol.virtual_address).unwrap();
+
+                    if section.kind == DolSectionType::Bss {
+                        continue;
+                    }
+
+                    if last_section_kind != section.kind {
+                        let section_flags = get_section_flags(section.kind);
+                        let si = dol_file
+                            .header
+                            .sections
+                            .iter()
+                            .position(|s| s.target == section.target)
+                            .unwrap();
+                        let section_name = &section_name_map[&si];
+                        writeln!(tu_file, ".section {}, {}", section_name, section_flags)?;
+                    }
+
+                    last_section_kind = section.kind;
+
+                    let data = dol_file.virtual_data_at(symbol.virtual_address, symbol.size)?;
+                    match section.kind {
+                        DolSectionType::Text => tracker.write_text_section(
+                            &mut tu_file,
+                            data,
+                            symbol.virtual_address,
+                            0,
+                            false
+                        )?,
+                        DolSectionType::Data => tracker.write_data_section(
+                            &mut tu_file,
+                            data,
+                            symbol.virtual_address,
+                            0,
+                            false,
+                        )?,
+                        DolSectionType::Bss => unreachable!(),
+                    }
+
+                    writeln!(tu_file)?;
+                }
+            }
+        }
+
         println!("\nWriting Sections Files");
         for (si, section) in dol_file.header.sections.iter().enumerate() {
-            let section_name = section_name_map.get(&si).unwrap();
+            let section_name = &section_name_map[&si];
             let section_file_name = format!("{}.s", section_name.replace(".", ""));
             let section_file_path = asm_path.join(section_file_name);
             let mut section_file = create_file(&section_file_path)?;
@@ -101,17 +189,13 @@ impl DolCmd {
             let size = section.size;
             let end = start + size;
 
-            let section_type: String = match section.kind {
-                DolSectionType::Text => "\"ax\"".into(),
-                DolSectionType::Data => "\"wa\"".into(),
-                DolSectionType::Bss => "\"\", @nobits".into(),
-            };
+            let section_flags = get_section_flags(section.kind);
 
             writeln!(section_file, ".include \"macros.s\"\n")?;
             writeln!(
                 section_file,
                 ".section {}, {}  # 0x{:08X} - 0x{:08X} ; 0x{:08X}\n",
-                section_name, section_type, start, end, size as u32
+                section_name, section_flags, start, end, size as u32
             )?;
 
             let section_data = dol_file.section_data(section);
@@ -122,12 +206,14 @@ impl DolCmd {
                     &section_data,
                     start,
                     section.offset,
+                    remove_symbols_data
                 )?,
                 DolSectionType::Data => tracker.write_data_section(
                     &mut section_file,
                     &section_data,
                     start,
                     section.offset,
+                    remove_symbols_data
                 )?,
                 DolSectionType::Bss => tracker.write_bss_section(&mut section_file, size, start)?,
             }
