@@ -107,8 +107,10 @@ impl<'a> GPRTracker<'a> {
                 // Since at least is a branch into a known section treat it as a label
                 self.add_label(ins.addr, LabelAddress::BRANCH(branch_dest));
 
-                // if is not a conditional branch, treat it as a function
-                if self.detect_functions && (ins.op == Opcode::B || ins.field_BO() == 20) {
+                if !is_label_addr_in_src_section(dol_file, branch_dest, ins.addr)
+                    // if is not a conditional branch, treat it as a function
+                    || (self.detect_functions && (ins.op == Opcode::B || ins.field_BO() == 20))
+                {
                     self.label_names.insert(
                         branch_dest,
                         Symbol::with_name(format!("func_{:08X}", branch_dest), branch_dest),
