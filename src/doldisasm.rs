@@ -52,7 +52,7 @@ impl DolCmd {
             let mut map = BTreeMap::default();
             map.insert(
                 dol_file.header.entry_point,
-                Symbol::with_name("__start".into()),
+                Symbol::with_name("__start".into(), dol_file.header.entry_point),
             );
             map
         };

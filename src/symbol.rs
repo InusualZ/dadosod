@@ -33,8 +33,9 @@ pub struct Symbol {
 }
 
 impl Symbol {
-    pub fn with_name(name: String) -> Self {
+    pub fn with_name(name: String, virtual_address: u32) -> Self {
         Symbol {
+            virtual_address,
             name,
             ..Default::default()
         }

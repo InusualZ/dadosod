@@ -109,7 +109,7 @@ impl<'a> GPRTracker<'a> {
                 if self.detect_functions && (ins.op == Opcode::B || ins.field_BO() == 20) {
                     self.label_names.insert(
                         branch_dest,
-                        Symbol::with_name(format!("func_{:08X}", branch_dest)),
+                        Symbol::with_name(format!("func_{:08X}", branch_dest), branch_dest),
                     );
                 }
             }
@@ -167,7 +167,10 @@ impl<'a> GPRTracker<'a> {
                 {
                     self.label_names.insert(
                         target_address.clone(),
-                        Symbol::with_name(self.get_label_for(target_address.clone())),
+                        Symbol::with_name(
+                            self.get_label_for(target_address.clone()),
+                            target_address.clone(),
+                        ),
                     );
                 }
             }
@@ -286,7 +289,7 @@ impl<'a> GPRTracker<'a> {
                         )
                     {
                         self.label_names
-                            .insert(word, Symbol::with_name(self.get_label_for(word)));
+                            .insert(word, Symbol::with_name(self.get_label_for(word), word));
                     }
                 }
 
