@@ -62,7 +62,7 @@ pub struct GPRTracker<'a> {
 
 impl<'a> GPRTracker<'a> {
     pub fn new(symbols: &'a mut BTreeMap<u32, Symbol>, detect_functions: bool) -> Self {
-        let data = Self {
+        let mut data = Self {
             r2_addr: 0,
             r13_addr: 0,
             ins_labels: Default::default(),
@@ -70,6 +70,8 @@ impl<'a> GPRTracker<'a> {
             detect_functions,
             label_names: symbols,
         };
+
+        data.labels.extend(data.label_names.keys());
 
         data
     }
