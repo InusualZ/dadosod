@@ -133,7 +133,7 @@ impl DolCmd {
                 println!(" - {}", translation_unit);
                 writeln!(tu_file, ".include \"macros.s\"\n")?;
 
-                let mut last_section_kind = DolSectionType::Bss;
+                let mut last_section_index = -1i32;
                 for symbol in symbols {
                     let section = dol_file.header.section_at(symbol.virtual_address).unwrap();
 
@@ -141,19 +141,20 @@ impl DolCmd {
                         continue;
                     }
 
-                    if last_section_kind != section.kind {
+                    let si = dol_file
+                        .header
+                        .sections
+                        .iter()
+                        .position(|s| s.target == section.target)
+                        .unwrap();
+
+                    if last_section_index != si as i32 {
                         let section_flags = get_section_flags(section.kind);
-                        let si = dol_file
-                            .header
-                            .sections
-                            .iter()
-                            .position(|s| s.target == section.target)
-                            .unwrap();
                         let section_name = &section_name_map[&si];
                         writeln!(tu_file, ".section {}, {}", section_name, section_flags)?;
                     }
 
-                    last_section_kind = section.kind;
+                    last_section_index = si as i32;
 
                     let data = dol_file.virtual_data_at(symbol.virtual_address, symbol.size)?;
                     match section.kind {
@@ -162,7 +163,7 @@ impl DolCmd {
                             data,
                             symbol.virtual_address,
                             0,
-                            false
+                            false,
                         )?,
                         DolSectionType::Data => tracker.write_data_section(
                             &mut tu_file,
@@ -206,14 +207,14 @@ impl DolCmd {
                     &section_data,
                     start,
                     section.offset,
-                    remove_symbols_data
+                    remove_symbols_data,
                 )?,
                 DolSectionType::Data => tracker.write_data_section(
                     &mut section_file,
                     &section_data,
                     start,
                     section.offset,
-                    remove_symbols_data
+                    remove_symbols_data,
                 )?,
                 DolSectionType::Bss => tracker.write_bss_section(&mut section_file, size, start)?,
             }
