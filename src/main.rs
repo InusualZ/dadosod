@@ -1,7 +1,4 @@
-mod doldisasm;
-mod tracker;
-mod utils;
-mod symbol;
+use dadosod::doldisasm;
 
 use argh::FromArgs;
 use doldisasm::DolCmd;
