@@ -1,7 +1,7 @@
 use argh::FromArgs;
 use dol::{Dol, DolSection, DolSectionType};
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::{
     collections::BTreeMap,
     fs::{File, OpenOptions},
@@ -582,13 +582,15 @@ fn calculate_section_names(dol_file: &mut Dol) -> BTreeMap<usize, String> {
 }
 
 #[inline]
-fn create_file<P>(path: P) -> std::io::Result<File>
+fn create_file<P>(path: P) -> std::io::Result<BufWriter<File>>
 where
     P: AsRef<Path>,
 {
-    OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(&path)
+    Ok(BufWriter::new(
+        OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(&path)?,
+    ))
 }
