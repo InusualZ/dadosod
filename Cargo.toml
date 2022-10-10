@@ -3,14 +3,13 @@ name = "dadosod"
 description = "Facilitate the process of creating a decompilation project for a given Wii/Gamecube game"
 authors = ["Wesley Moret <wesmoret98@gmail.com>"]
 version = "1.0.1"
-license="GPL-3.0-or-later"
+license = "GPL-3.0-or-later"
 keywords = ["wii", "gamecube", "decompilation", "disassembly"]
 edition = "2021"
 
 [dependencies]
-
-ppc750cl = { git='https://github.com/terorie/ppc750cl', package='ppc750cl' }
-dol = { git='https://github.com/terorie/ppc750cl', package='dol' }
+ppc750cl = { git = 'https://github.com/encounter/ppc750cl', branch = 'updates', package = 'ppc750cl' }
+dol = { git = 'https://github.com/terorie/ppc750cl', package = 'dol' }
 serde = "1.0"
 csv = "1.1.6"
 argh = "0.1"

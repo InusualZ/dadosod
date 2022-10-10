@@ -232,6 +232,77 @@ impl DolCmd {
     }
 }
 
+const SPRS: [(&str, i32); 68] = [
+    ("XER", 1),
+    ("LR", 8),
+    ("CTR", 9),
+    ("DSISR", 18),
+    ("DAR", 19),
+    ("DEC", 22),
+    ("SDR1", 25),
+    ("SRR0", 26),
+    ("SRR1", 27),
+    ("SPRG0", 272),
+    ("SPRG1", 273),
+    ("SPRG2", 274),
+    ("SPRG3", 275),
+    ("EAR", 282),
+    ("PVR", 287),
+    ("IBAT0U", 528),
+    ("IBAT0L", 529),
+    ("IBAT1U", 530),
+    ("IBAT1L", 531),
+    ("IBAT2U", 532),
+    ("IBAT2L", 533),
+    ("IBAT3U", 534),
+    ("IBAT3L", 535),
+    ("DBAT0U", 536),
+    ("DBAT0L", 537),
+    ("DBAT1U", 538),
+    ("DBAT1L", 539),
+    ("DBAT2U", 540),
+    ("DBAT2L", 541),
+    ("DBAT3U", 542),
+    ("DBAT3L", 543),
+    ("GQR0", 912),
+    ("GQR1", 913),
+    ("GQR2", 914),
+    ("GQR3", 915),
+    ("GQR4", 916),
+    ("GQR5", 917),
+    ("GQR6", 918),
+    ("GQR7", 919),
+    ("HID2", 920),
+    ("WPAR", 921),
+    ("DMA_U", 922),
+    ("DMA_L", 923),
+    ("UMMCR0", 936),
+    ("UPMC1", 937),
+    ("UPMC2", 938),
+    ("USIA", 939),
+    ("UMMCR1", 940),
+    ("UPMC3", 941),
+    ("UPMC4", 942),
+    ("USDA", 943),
+    ("MMCR0", 952),
+    ("PMC1", 953),
+    ("PMC2", 954),
+    ("SIA", 955),
+    ("MMCR1", 956),
+    ("PMC3", 957),
+    ("PMC4", 958),
+    ("SDA", 959),
+    ("HID0", 1008),
+    ("HID1", 1009),
+    ("IABR", 1010),
+    ("DABR", 1013),
+    ("L2CR", 1017),
+    ("ICTC", 1019),
+    ("THRM1", 1020),
+    ("THRM2", 1021),
+    ("THRM3", 1022),
+];
+
 fn write_macro_file<W>(
     dst: &mut W,
     dol_file: &Dol,
@@ -261,25 +332,32 @@ where
     writeln!(dst, "*/")?;
 
     // Write macros
-    writeln!(dst, "# PowerPC Register Constants")?;
+    writeln!(dst, "\n# General Purpose Registers (GPRs)")?;
     for i in 0..32 {
         writeln!(dst, ".set r{}, {}", i, i)?;
     }
 
+    writeln!(dst, "\n# Floating Point Registers (FPRs)")?;
     for i in 0..32 {
         writeln!(dst, ".set f{}, {}", i, i)?;
     }
 
+    writeln!(dst, "\n# Graphics Quantization Registers (GQRs)")?;
     for i in 0..8 {
         writeln!(dst, ".set qr{}, {}", i, i)?;
     }
 
+    writeln!(dst, "\n# Special Purpose Registers (SPRs)")?;
+    for (name, i) in SPRS {
+        writeln!(dst, ".set {}, {}", name, i)?;
+    }
+
     if tracker.r13_addr != 0 {
-        writeln!(dst, "# Small Data Area (read/write) Base")?;
+        writeln!(dst, "\n# Small Data Area (read/write) Base")?;
         writeln!(dst, ".set _SDA_BASE_, 0x{:08X}", tracker.r13_addr)?;
     }
     if tracker.r2_addr != 0 {
-        writeln!(dst, "# Small Data Area (read only) Base")?;
+        writeln!(dst, "\n# Small Data Area (read only) Base")?;
         writeln!(dst, ".set _SDA2_BASE_, 0x{:08X}", tracker.r2_addr)?;
     }
 
