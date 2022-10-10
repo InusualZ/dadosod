@@ -417,7 +417,7 @@ impl<'a> GPRTracker<'a> {
         let simple = ins.clone().simplified();
         let mut f = String::new();
 
-        write!(f, "{}{}", simple.mnemonic, ins.suffix())?;
+        write!(f, "{}{}", simple.mnemonic, simple.suffix)?;
         let mut writing_offset = false;
         for (i, arg) in simple.args.iter().enumerate() {
             if i == 0 {
