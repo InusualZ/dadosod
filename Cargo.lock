@@ -140,7 +140,7 @@ dependencies = [
 [[package]]
 name = "ppc750cl"
 version = "0.2.0"
-source = "git+https://github.com/encounter/ppc750cl?rev=4d8e4733319312abf47cde193d7386e55744bdf8#4d8e4733319312abf47cde193d7386e55744bdf8"
+source = "git+https://github.com/encounter/ppc750cl?rev=aa631a33de7882c679afca89350898b87cb3ba3f#aa631a33de7882c679afca89350898b87cb3ba3f"
 dependencies = [
  "num-traits",
  "serde",

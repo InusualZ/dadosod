@@ -20,6 +20,10 @@ pub struct DolCmd {
     #[argh(positional)]
     dol_file_path: PathBuf,
 
+    /// path to where every thing would be placed (assembly file, lfc, etc..)
+    #[argh(option, short='o')]
+    output_path: Option<PathBuf>,
+
     /// path of the map file
     #[argh(option, short = 'm')]
     map_file_path: Option<PathBuf>,
@@ -84,13 +88,18 @@ impl DolCmd {
             }
         }
 
-        let dol_full_path = std::fs::canonicalize(&self.dol_file_path)?;
-        let dol_parent_path = dol_full_path.parent().unwrap();
+        let output_path = if let Some(path) = &self.output_path {
+            path.clone()
+        } else {
+            let dol_full_path = std::fs::canonicalize(&self.dol_file_path)?;
+            let parent = dol_full_path.parent().unwrap();
+            parent.to_path_buf()
+        };
 
-        let asm_path = dol_parent_path.join("asm");
+        let asm_path = output_path.join("asm");
         std::fs::create_dir_all(&asm_path)?;
 
-        let include_path = dol_parent_path.join("include");
+        let include_path = output_path.join("include");
         std::fs::create_dir_all(&include_path)?;
 
         {
@@ -124,7 +133,7 @@ impl DolCmd {
         if grouped_symbols.len() > 0 {
             println!("\nWriting Translation Units");
             for (translation_unit, symbols) in grouped_symbols {
-                let mut full_tu_path = dol_parent_path.join(&translation_unit);
+                let mut full_tu_path = output_path.join(&translation_unit);
                 full_tu_path.set_extension("s");
 
                 std::fs::create_dir_all(full_tu_path.parent().unwrap())?;
@@ -184,7 +193,7 @@ impl DolCmd {
         for (si, section) in dol_file.header.sections.iter().enumerate() {
             let section_name = &section_name_map[&si];
             let section_file_name = format!("{}.s", section_name.replace(".", ""));
-            let section_file_path = asm_path.join(section_file_name);
+            let section_file_path = asm_path.join(&section_file_name);
             let mut section_file = create_file(&section_file_path)?;
             let start = section.target;
             let size = section.size;
@@ -222,7 +231,7 @@ impl DolCmd {
 
         {
             println!("\nWriting Linker Script");
-            let mut linker_script_file = create_file(dol_parent_path.join("ldscript.lcf"))?;
+            let mut linker_script_file = create_file(output_path.join("ldscript.lcf"))?;
             write_linker_script_file(&mut linker_script_file, &dol_file, &section_name_map)?;
         }
 
