@@ -2,7 +2,7 @@
 name = "dadosod"
 description = "Facilitate the process of creating a decompilation project for a given Wii/Gamecube game"
 authors = ["Wesley Moret <wesmoret98@gmail.com>"]
-version = "1.0.1"
+version = "1.1.1"
 license = "GPL-3.0-or-later"
 keywords = ["wii", "gamecube", "decompilation", "disassembly"]
 edition = "2021"
