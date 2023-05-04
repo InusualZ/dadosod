@@ -13,3 +13,7 @@ dol = { git = 'https://github.com/terorie/ppc750cl', package = 'dol' }
 serde = "1.0"
 csv = "1.1.6"
 argh = "0.1"
+cwparse = { git = "https://github.com/ribbanya/cwparse", version = "0.1.2" }
+rayon = "1.7.0"
+memmap2 = "0.5.10"
+anyhow = "1.0.71"
