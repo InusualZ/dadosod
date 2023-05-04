@@ -24,7 +24,7 @@ pub struct DolCmd {
     #[argh(option, short = 'o')]
     output_path: Option<PathBuf>,
 
-    /// path of the map file
+    /// path of the map file, either a CodeWarrior map or CSV
     #[argh(option, short = 'm')]
     map_file_path: Option<PathBuf>,
 
@@ -46,19 +46,87 @@ impl DolCmd {
         let section_name_map = calculate_section_names(&mut dol_file);
         assert_eq!(section_name_map.len(), dol_file.header.sections.len());
 
-        let mut symbols_map = if let Some(map_file_path) = &self.map_file_path {
-            let map_file = File::open(&map_file_path)?;
-            print!("Reading Symbols .. ");
-            let map = Symbol::from_csv(map_file)?;
-            println!("{}", map.len());
-            map
-        } else {
-            let mut map = BTreeMap::default();
-            map.insert(
-                dol_file.header.entry_point,
-                Symbol::with_name("__start".into(), dol_file.header.entry_point),
-            );
-            map
+        let mut symbols_map = match &self
+            .map_file_path
+            .as_ref()
+            .map(|p| (p.as_path(), p.extension().map(|ext| ext.to_str()).flatten()))
+        {
+            Some((path, Some("csv"))) => {
+                let map_file = File::open(&path)?;
+                print!("Reading Symbols .. ");
+                let map = Symbol::from_csv(map_file)?;
+                println!("{}", map.len());
+                map
+            }
+            Some((path, Some("map"))) => {
+                use anyhow::Context;
+                use cwparse::{
+                    map::{
+                        Identifier::{Mangled, Named},
+                        Line,
+                    },
+                    section_table::Data::{Child, Parent},
+                };
+                use memmap2::Mmap;
+                use rayon::{prelude::ParallelIterator, str::ParallelString};
+                use std::str;
+
+                let file = File::open(path).context("Failed to open the map file.")?;
+                let mmap =
+                    unsafe { Mmap::map(&file) }.context("Failed to create the memory map.")?;
+                let input = str::from_utf8(mmap.as_ref()).context("Failed to convert to UTF-8.")?;
+
+                input
+                    .par_lines()
+                    .map(|line| cwparse::map::line::<()>(line).map(|(_, line)| line))
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter()
+                    .filter_map(|line| match line {
+                        Line::SectionSymbol(symbol) => {
+                            let name = match symbol.id {
+                                Named { name, .. } => name,
+                                Mangled { name } => name,
+                                _ => return None,
+                            }
+                            .to_string();
+
+                            let section_address = match symbol.addr {
+                                0 => None,
+                                addr => Some(addr),
+                            };
+
+                            let (size, alignment, parent) = match symbol.data {
+                                Parent { size, align } => (size, align as u32, None),
+                                Child {
+                                    parent: Named { name: parent, .. } | Mangled { name: parent },
+                                } => (0, 0, Some(parent.to_string())),
+                                _ => return None,
+                            };
+
+                            Some(Symbol {
+                                section_address,
+                                size,
+                                alignment,
+                                virtual_address: symbol.virt_addr,
+                                name,
+                                parent,
+                                translation_unit: Some(format!("src/{}", symbol.origin.obj)),
+                            })
+                        }
+                        _ => None,
+                    })
+                    .map(|sym| (sym.virtual_address, sym))
+                    .collect::<BTreeMap<_, _>>()
+            }
+            Some((_, _)) => panic!(r#"Map file must be ".map" or ".csv"."#),
+            None => {
+                let mut map = BTreeMap::default();
+                map.insert(
+                    dol_file.header.entry_point,
+                    Symbol::with_name("__start".into(), dol_file.header.entry_point),
+                );
+                map
+            }
         };
 
         println!("Sections:");
