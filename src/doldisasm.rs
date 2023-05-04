@@ -21,7 +21,7 @@ pub struct DolCmd {
     dol_file_path: PathBuf,
 
     /// path to where every thing would be placed (assembly file, lfc, etc..)
-    #[argh(option, short='o')]
+    #[argh(option, short = 'o')]
     output_path: Option<PathBuf>,
 
     /// path of the map file
